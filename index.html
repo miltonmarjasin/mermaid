@@ -27,12 +27,18 @@
 
     document.addEventListener("DOMContentLoaded", async () => {
       const params = new URLSearchParams(window.location.search);
-      const rawCode = params.get('mermaidCode');
+      let rawCode = params.get('mermaidCode');
       
       if (rawCode) {
         const container = document.getElementById('diagram');
         try {
-          const { svg } = await mermaid.render('mermaid-svg', rawCode);
+          // Ersätt HTML-entiteter automatiskt innan rendering
+          const cleanCode = rawCode
+            .replace(/&gt;/g, '>')
+            .replace(/&lt;/g, '<')
+            .replace(/&amp;/g, '&');
+
+          const { svg } = await mermaid.render('mermaid-svg', cleanCode);
           container.innerHTML = svg;
         } catch (err) {
           container.innerText = 'Kunde inte rendera diagrammet: ' + err.message;
