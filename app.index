@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studiekort &amp; quiz</title>
+<style>
+:root{
+  --page:#e6ebf0; --ink:#1f2a44; --muted:#5d6880; --paper:#fff; --line:#cfd8e3;
+  --rule:#b9cde6; --margin:#e07a7a; --accent:#2b50aa;
+  --ok:#1e7a4c; --ok-bg:#e2f3e9; --bad:#c23b32; --bad-bg:#fbe6e4;
+  --serif:"Iowan Old Style","Charter","Palatino Linotype",Georgia,serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{--page:#161b24;--ink:#e4e9f2;--muted:#95a0b5;--line:#2c3545;--accent:#8fa9ec}
+  .btn,.opt,.explain,.panel{background:#1f2633!important;color:var(--ink)}
+  .opt.correct{background:#173826!important} .opt.wrong{background:#3c1f1d!important}
+}
+*{box-sizing:border-box;margin:0}
+body{font:17px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--page);color:var(--ink);
+  min-height:100vh;display:flex;justify-content:center;padding:40px 16px}
+main{width:100%;max-width:620px}
+header{display:flex;justify-content:space-between;font-size:14px;color:var(--muted);margin-bottom:8px}
+.bar{height:4px;background:var(--line);border-radius:4px;overflow:hidden;margin-bottom:28px}
+.bar i{display:block;height:100%;background:var(--accent);transition:width .3s}
+
+/* ---------- Studiekort: linjerat registerkort ---------- */
+.scene{perspective:1400px;cursor:pointer;-webkit-tap-highlight-color:transparent;border-radius:6px}
+.scene:focus-visible{outline:3px solid var(--accent);outline-offset:4px}
+.flip{display:grid;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.3,.7,.3,1)}
+.scene.flipped .flip{transform:rotateY(180deg)}
+.face{grid-area:1/1;position:relative;min-height:320px;padding:64px 36px 52px;border-radius:6px;
+  display:flex;flex-direction:column;justify-content:center;gap:14px;
+  background:var(--paper) repeating-linear-gradient(transparent 0 31px,var(--rule) 31px 32px) 0 56px/100% calc(100% - 56px) no-repeat;
+  box-shadow:0 1px 2px rgba(20,30,60,.15),0 12px 28px -14px rgba(20,30,60,.35);
+  backface-visibility:hidden;-webkit-backface-visibility:hidden;color:#1f2a44}
+.face::before{content:"";position:absolute;left:0;right:0;top:55px;height:2px;background:var(--margin)}
+.back{transform:rotateY(180deg)}
+.label{position:absolute;top:18px;left:36px;font-size:14px;color:#5d6880}
+.hint{position:absolute;bottom:16px;left:0;right:0;text-align:center;font-size:13px;color:#8a93a6}
+.face p{font-family:var(--serif);font-size:25px;line-height:1.3}
+.face .sub{font-size:18px;line-height:1.5;color:#44506a}
+.face .answer{color:#2b50aa}
+
+.nav{display:flex;justify-content:space-between;gap:12px;margin-top:24px}
+.btn{font:inherit;font-size:15px;padding:11px 20px;border-radius:8px;border:1px solid var(--line);
+  background:var(--paper);color:var(--ink);cursor:pointer}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--page)}
+
+/* ---------- Quiz ---------- */
+.q{font-family:var(--serif);font-size:27px;font-weight:600;line-height:1.3;margin-bottom:22px}
+.opts{display:grid;gap:10px}
+.opt{display:flex;gap:14px;align-items:flex-start;text-align:left;padding:14px 16px}
+.opt .key{flex:none;width:26px;height:26px;border-radius:50%;border:1px solid var(--line);
+  display:grid;place-items:center;font-size:13px;color:var(--muted)}
+.opt:disabled{opacity:1;cursor:default}
+.opt.dim{opacity:.45}
+.opt.correct{background:var(--ok-bg);border-color:var(--ok)}
+.opt.correct .key{background:var(--ok);border-color:var(--ok);color:#fff}
+.opt.wrong{background:var(--bad-bg);border-color:var(--bad)}
+.opt.wrong .key{background:var(--bad);border-color:var(--bad);color:#fff}
+.explain{margin-top:18px;padding:14px 18px;background:var(--paper);border-left:3px solid var(--accent);border-radius:0 8px 8px 0}
+.explain.ok{border-color:var(--ok)} .explain.bad{border-color:var(--bad)}
+.explain strong{display:block;margin-bottom:2px}
+.explain.ok strong{color:var(--ok)} .explain.bad strong{color:var(--bad)}
+
+.panel{background:var(--paper);border-radius:8px;padding:36px;text-align:center}
+.panel .big{font-size:56px;line-height:1}
+.panel h2{font-family:var(--serif);font-size:30px;margin:14px 0 6px}
+.panel p{color:var(--muted);margin-bottom:24px}
+
+/* ---------- Fel / tomt läge ---------- */
+.error{text-align:left;border-top:4px solid var(--bad)}
+.error h2{font-size:24px;margin:0 0 8px}
+.error p{margin-bottom:16px}
+.error a{color:var(--accent);margin-right:16px}
+details{margin-top:8px;font-size:14px}
+summary{cursor:pointer;color:var(--accent)}
+details h4{margin:14px 0 4px;font-size:13px;color:var(--muted);font-weight:500}
+pre{white-space:pre-wrap;word-break:break-all;font-size:12.5px;background:var(--page);padding:10px 12px;border-radius:6px;max-height:220px;overflow:auto}
+
+@media (prefers-reduced-motion:reduce){.flip,.bar i{transition:none}}
+@media (max-width:480px){.face{padding:60px 22px 50px}.label{left:22px}.face p{font-size:21px}.q{font-size:22px}.panel{padding:26px 20px}}
+</style>
+</head>
+<body>
+<main id="app"></main>
+
+<script>
+const app = document.getElementById('app');
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;   // alltid textContent – data kommer från URL:en
+  return e;
+}
+
+/* =========================================================
+   1. Läs URL-parametrar (rått, så vi själva styr avkodningen)
+   ========================================================= */
+function readParams() {
+  // Ta allt efter första "?" – inkl. ev. "#" som hamnat i hash p.g.a. okodad JSON
+  let q = location.href.split('?').slice(1).join('?').replace(/&amp;/gi, '&');
+  const type = ((q.match(/(?:^|[&;])type=([a-z]+)/i) || [])[1] || 'cards').toLowerCase();
+  const m = q.match(/(?:^|[&;])data=/i);
+  let data = m ? q.slice(m.index + m[0].length) : '';
+  data = data.replace(/&type=[a-z]+[^\]}]*$/i, ''); // om type står efter data
+  return { type: type.startsWith('q') ? 'quiz' : 'cards', data };
+}
+
+/* =========================================================
+   2. Sanering & reparation av JSON
+   ========================================================= */
+function urlDecode(s) {
+  // Avkoda sekvens för sekvens så att en trasig %-kod inte fäller hela strängen
+  const once = t => t.replace(/(%[0-9a-f]{2})+/gi, m => { try { return decodeURIComponent(m); } catch { return m; } });
+  s = once(s);
+  for (let i = 0; i < 3 && /%(22|27|2C|3A|5B|5D|7B|7D)/i.test(s); i++) s = once(s); // dubbelkodat
+  return s;
+}
+
+function decodeEntities(s) {
+  for (let i = 0; i < 3 && /&amp;/i.test(s); i++) s = s.replace(/&amp;/gi, '&'); // &amp;quot; osv.
+  return s
+    .replace(/&quot;|&#0*34;|&#x0*22;/gi, '"')
+    .replace(/&apos;|&#0*39;|&#x0*27;/gi, "'")
+    .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&nbsp;|&#160;/gi, ' ');
+}
+
+function stripJunk(s) {
+  s = s.replace(/```(?:json)?/gi, '');
+  const start = s.search(/[\[{]/);
+  const end = Math.max(s.lastIndexOf(']'), s.lastIndexOf('}'));
+  if (start > -1 && end > start) s = s.slice(start, end + 1);
+  if (/^[\[{\s]*\\"/.test(s)) s = s.replace(/\\"/g, '"');   // hela JSON:en dubbel-escapad
+  return s;
+}
+
+// Går igenom tecken för tecken: 'enkelfnuttade' strängar -> "dubbelfnuttade",
+// och råa radbrytningar/tabbar inuti strängar escapas. Apostrofer i "..."-strängar lämnas orörda.
+function fixQuotes(s) {
+  let out = '', q = null;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (!q) {
+      if (c === '"' || c === "'") { q = c; out += '"'; } else out += c;
+      continue;
+    }
+    if (c === '\\') {
+      const n = s[++i] ?? '';
+      out += (q === "'" && n === "'") ? "'" : c + n;
+    } else if (c === q) { q = null; out += '"'; }
+    else if (c === '"') out += '\\"';
+    else if (c === '\n') out += '\\n';
+    else if (c === '\r') out += '\\r';
+    else if (c === '\t') out += '\\t';
+    else out += c;
+  }
+  return out;
+}
+
+function fixBackslashes(s) {
+  s = s.replace(/\\+(?=[\[\]])/g, '');   // \[  \\[  \]  \\]
+  // Ta bort backslash före tecken som inte är giltig JSON-escape (\_ \* \# \' ...)
+  return s.replace(/\\(.)/gs, (m, c) => '"\\/bfnrtu'.includes(c) ? m : c);
+}
+
+const removeTrailingCommas = s => s.replace(/,\s*([\]}])/g, '$1');
+
+// Klipp vid den parentes som stänger den första – tar bort skräp som "];." efter JSON:en
+function cutToBalanced(s) {
+  let depth = 0, inStr = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) { if (c === '\\') i++; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === '[' || c === '{') depth++;
+    else if ((c === ']' || c === '}') && --depth === 0) return s.slice(0, i + 1);
+  }
+  return s;
+}
+
+function parseData(raw) {
+  let s = raw.replace(/\+/g, '%20');
+  s = urlDecode(s);
+  s = decodeEntities(s);
+  s = stripJunk(s);
+  s = cutToBalanced(fixQuotes(s));
+  s = fixBackslashes(s);
+  s = removeTrailingCommas(s);
+
+  try { return JSON.parse(s); }
+  catch (firstError) {
+    // Reservförsök: typografiska citattecken och onoterade nycklar
+    let s2 = s.replace(/[“”„″]/g, '"').replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":');
+    s2 = removeTrailingCommas(fixBackslashes(fixQuotes(s2)));
+    try { return JSON.parse(s2); }
+    catch { firstError.cleaned = s; throw firstError; }
+  }
+}
+
+// Gör datan förutsägbar oavsett små variationer i schemat
+function normalize(d) {
+  if (!Array.isArray(d)) {
+    d = Array.isArray(d?.questions) ? d.questions
+      : Array.isArray(d?.cards) ? d.cards
+      : Object.values(d || {}).find(Array.isArray) || [d];
+  }
+  return d.filter(x => x && typeof x === 'object').map(x => {
+    const options = Array.isArray(x.options) ? x.options.map(String) : [];
+    let c = x.correct;
+    if (typeof c === 'string') {
+      const t = c.trim();
+      if (/^\d+$/.test(t)) c = +t;
+      else if (/^[a-d]$/i.test(t)) c = t.toUpperCase().charCodeAt(0) - 65;
+      else c = options.findIndex(o => o.trim().toLowerCase() === t.toLowerCase());
+    }
+    return {
+      question: String(x.question ?? x.front ?? ''),
+      options,
+      correct: Number.isInteger(c) && c >= 0 && c < options.length ? c : -1,
+      back: String(x.flashcard_back ?? x.back ?? x.answer ?? x.explanation ?? '')
+    };
+  }).filter(x => x.question);
+}
+
+/* =========================================================
+   3a. Läge: studiekort
+   ========================================================= */
+function renderCards(items) {
+  let i = 0;
+  const head = el('header'), title = el('span', null, 'Studiekort'), count = el('span');
+  head.append(title, count);
+  const bar = el('div', 'bar'), fill = el('i'); bar.append(fill);
+
+  const scene = el('div', 'scene'), flip = el('div', 'flip');
+  const front = el('div', 'face'), back = el('div', 'face back');
+  scene.tabIndex = 0;
+  scene.setAttribute('role', 'button');
+  scene.setAttribute('aria-label', 'Vänd kortet');
+  flip.append(front, back); scene.append(flip);
+
+  const nav = el('div', 'nav');
+  const prev = el('button', 'btn', 'Föregående kort');
+  const next = el('button', 'btn primary');
+  nav.append(prev, next);
+  app.replaceChildren(head, bar, scene, nav);
+
+  const toggle = () => scene.classList.toggle('flipped');
+
+  function show() {
+    const it = items[i];
+    // Vänd tillbaka utan animation så att nästa svar inte skymtar förbi
+    flip.style.transition = 'none';
+    scene.classList.remove('flipped');
+    void flip.offsetHeight;
+    flip.style.transition = '';
+
+    count.textContent = `Kort ${i + 1} av ${items.length}`;
+    fill.style.width = ((i + 1) / items.length * 100) + '%';
+
+    front.replaceChildren(el('span', 'label', 'Fråga'), el('p', null, it.question), el('span', 'hint', 'Klicka för att vända'));
+    const answer = it.options[it.correct];
+    back.replaceChildren(el('span', 'label', 'Svar'));
+    if (answer) back.append(el('p', 'answer', answer));
+    if (it.back) back.append(el('p', answer ? 'sub' : null, it.back));
+
+    prev.disabled = i === 0;
+    next.textContent = i === items.length - 1 ? 'Börja om' : 'Nästa kort';
+  }
+
+  scene.onclick = toggle;
+  prev.onclick = () => { if (i > 0) { i--; show(); } };
+  next.onclick = () => { i = (i + 1) % items.length; show(); };
+  document.onkeydown = e => {
+    if (e.key === 'ArrowRight') next.click();
+    else if (e.key === 'ArrowLeft') prev.click();
+    else if ((e.key === ' ' || e.key === 'Enter') && document.activeElement === scene) { e.preventDefault(); toggle(); }
+  };
+  show();
+}
+
+/* =========================================================
+   3b. Läge: quiz
+   ========================================================= */
+function renderQuiz(items) {
+  let i = 0, score = 0;
+  const n = items.length;
+
+  function show() {
+    const it = items[i];
+    const head = el('header'), count = el('span', null, `Fråga ${i + 1} av ${n}`), pts = el('span', null, `${score} rätt`);
+    head.append(count, pts);
+    const bar = el('div', 'bar'), fill = el('i'); bar.append(fill);
+    fill.style.width = (i / n * 100) + '%';
+
+    const q = el('h2', 'q', it.question);
+    const opts = el('div', 'opts');
+    const explain = el('div', 'explain'); explain.hidden = true;
+    const nav = el('div', 'nav'); nav.style.justifyContent = 'flex-end';
+    const next = el('button', 'btn primary', i === n - 1 ? 'Visa resultat' : 'Nästa fråga');
+    next.hidden = true; nav.append(next);
+
+    const btns = it.options.map((o, k) => {
+      const b = el('button', 'btn opt');
+      b.append(el('span', 'key', String.fromCharCode(65 + k)), el('span', null, o));
+      b.onclick = () => answer(k);
+      return b;
+    });
+    opts.append(...btns);
+
+    function answer(k) {
+      const right = k === it.correct;
+      if (right) score++;
+      btns.forEach((b, j) => {
+        b.disabled = true;
+        b.classList.add(j === it.correct ? 'correct' : j === k ? 'wrong' : 'dim');
+      });
+      explain.className = 'explain ' + (right ? 'ok' : 'bad');
+      explain.replaceChildren(el('strong', null, right ? 'Rätt!' : 'Fel svar'));
+      if (it.back) explain.append(document.createTextNode(it.back));
+      explain.hidden = false;
+      next.hidden = false;
+      pts.textContent = `${score} rätt`;
+      fill.style.width = ((i + 1) / n * 100) + '%';
+      next.focus();
+    }
+
+    next.onclick = () => { i++; i < n ? show() : end(); };
+    app.replaceChildren(head, bar, q, opts, explain, nav);
+  }
+
+  function end() {
+    const p = score / n;
+    const emoji = p === 1 ? '🏆' : p >= .7 ? '🎉' : p >= .4 ? '👍' : '💪';
+    const box = el('div', 'panel');
+    const again = el('button', 'btn primary', 'Gör om quizet');
+    again.onclick = () => { i = 0; score = 0; show(); };
+    box.append(el('div', 'big', emoji), el('h2', null, `Du fick ${score} av ${n} rätt!`),
+      el('p', null, p === 1 ? 'Alla rätt.' : `${Math.round(p * 100)} % rätt svar.`), again);
+    app.replaceChildren(box);
+  }
+
+  show();
+}
+
+/* =========================================================
+   Fel- och tomläge
+   ========================================================= */
+function showError(title, message, details = []) {
+  const box = el('div', 'panel error');
+  box.append(el('h2', null, title), el('p', null, message));
+  if (details.length) {
+    const d = el('details');
+    d.append(el('summary', null, 'Visa vad som gick fel'));
+    details.forEach(([label, text]) => d.append(el('h4', null, label), el('pre', null, text)));
+    box.append(d);
+  }
+  app.replaceChildren(box);
+}
+
+function showEmpty() {
+  const demo = [
+    { id: 1, question: 'Vad är React?', options: ['Ett JavaScript-bibliotek för UI', 'Ett databashanteringssystem', 'Ett operativsystem', 'Ett CSS-ramverk'], correct: 0, flashcard_back: 'Ett JS-bibliotek för användargränssnitt utvecklat av Facebook 2013.' },
+    { id: 2, question: 'Vilket kommando listar filer i Bash?', options: ['cd', 'ls', 'rm', 'pwd'], correct: 1, flashcard_back: 'ls listar innehållet i en katalog.' }
+  ];
+  const enc = encodeURIComponent(JSON.stringify(demo));
+  const box = el('div', 'panel error');
+  box.style.borderTopColor = 'var(--accent)';
+  const links = el('p');
+  const a1 = el('a', null, 'Prova studiekort'); a1.href = `?type=cards&data=${enc}`;
+  const a2 = el('a', null, 'Prova quiz'); a2.href = `?type=quiz&data=${enc}`;
+  links.append(a1, a2);
+  box.append(el('h2', null, 'Ingen data i länken'),
+    el('p', null, 'Lägg till ?type=cards eller ?type=quiz och en data-parameter med frågorna som JSON.'), links);
+  app.replaceChildren(box);
+}
+
+/* =========================================================
+   Start
+   ========================================================= */
+function main() {
+  const { type, data } = readParams();
+  if (!data.trim()) return showEmpty();
+
+  let parsed;
+  try {
+    parsed = parseData(data);
+  } catch (e) {
+    const details = [['Felmeddelande', e.message]];
+    const pos = +((e.message.match(/position (\d+)/) || [])[1] ?? NaN);
+    if (e.cleaned && !isNaN(pos)) details.push(['Runt felet (▶ markerar positionen)', e.cleaned.slice(Math.max(0, pos - 60), pos) + '▶' + e.cleaned.slice(pos, pos + 60)]);
+    if (e.cleaned) details.push(['Data efter sanering', e.cleaned]);
+    details.push(['Rådata från länken', data]);
+    return showError('Frågorna kunde inte läsas', 'Datan i länken är inte giltig JSON, även efter automatisk reparation. Be om en ny länk eller kontrollera datan nedan.', details);
+  }
+
+  let items = normalize(parsed);
+  if (type === 'quiz') items = items.filter(x => x.options.length >= 2);
+  if (!items.length) {
+    return showError('Inga frågor hittades', type === 'quiz'
+      ? 'JSON:en lästes in, men ingen fråga har minst två svarsalternativ i "options".'
+      : 'JSON:en lästes in, men ingen post har fältet "question".',
+      [['Inläst data', JSON.stringify(parsed, null, 2)]]);
+  }
+
+  document.title = type === 'quiz' ? 'Quiz' : 'Studiekort';
+  type === 'quiz' ? renderQuiz(items) : renderCards(items);
+}
+
+main();
+</script>
+</body>
+</html>
