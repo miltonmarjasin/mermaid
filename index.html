@@ -26,14 +26,15 @@
     mermaid.initialize({ startOnLoad: false });
 
     document.addEventListener("DOMContentLoaded", async () => {
-      const params = new URLSearchParams(window.location.search);
-      let rawCode = params.get('mermaidCode');
+      // Hämta hela värdet efter 'mermaidCode=' direkt från adressfältet för att undvika att &gt; klipper av koden
+      const match = window.location.href.match(/[?&]mermaidCode=([^#]*)/);
       
-      if (rawCode) {
+      if (match && match[1]) {
         const container = document.getElementById('diagram');
         try {
-          // Ersätt HTML-entiteter automatiskt innan rendering
-          const cleanCode = rawCode
+          // Avkoda URL-tecken (%20, %5B osv) och städa bort HTML-entiteter
+          const decodedCode = decodeURIComponent(match[1]);
+          const cleanCode = decodedCode
             .replace(/&gt;/g, '>')
             .replace(/&lt;/g, '<')
             .replace(/&amp;/g, '&');
