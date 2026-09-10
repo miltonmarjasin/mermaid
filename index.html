@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tankekarta Viewer</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      background-color: #f9fafb;
+    }
+    #diagram {
+      background: white;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    }
+  </style>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: false });
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      const params = new URLSearchParams(window.location.search);
+      const rawCode = params.get('mermaidCode');
+      
+      if (rawCode) {
+        const container = document.getElementById('diagram');
+        try {
+          const { svg } = await mermaid.render('mermaid-svg', rawCode);
+          container.innerHTML = svg;
+        } catch (err) {
+          container.innerText = 'Kunde inte rendera diagrammet: ' + err.message;
+        }
+      } else {
+        document.getElementById('diagram').innerText = 'Ingen mermaidCode skickades med i länken.';
+      }
+    });
+  </script>
+</head>
+<body>
+  <div id="diagram">Laddar tankekarta...</div>
+</body>
+</html>
