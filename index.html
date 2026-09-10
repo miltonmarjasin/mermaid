@@ -26,18 +26,19 @@
     mermaid.initialize({ startOnLoad: false });
 
     document.addEventListener("DOMContentLoaded", async () => {
-      // Hämta hela värdet efter 'mermaidCode=' direkt från adressfältet för att undvika att &gt; klipper av koden
       const match = window.location.href.match(/[?&]mermaidCode=([^#]*)/);
       
       if (match && match[1]) {
         const container = document.getElementById('diagram');
         try {
-          // Avkoda URL-tecken (%20, %5B osv) och städa bort HTML-entiteter
-          const decodedCode = decodeURIComponent(match[1]);
-          const cleanCode = decodedCode
+          let cleanCode = decodeURIComponent(match[1])
             .replace(/&gt;/g, '>')
             .replace(/&lt;/g, '<')
-            .replace(/&amp;/g, '&');
+            .replace(/&amp;/g, '&')
+            // Lagar brutna pilar (--A blir -->A)
+            .replace(/--([a-zA-Z0-9_\[])/g, '-->$1')
+            // Tar bort extra vinkeltecken eller skräp i slutet av koden
+            .replace(/;?\s*>+\s*$/, ';');
 
           const { svg } = await mermaid.render('mermaid-svg', cleanCode);
           container.innerHTML = svg;
