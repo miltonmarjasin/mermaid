@@ -1,0 +1,1836 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>Studiekort och quiz</title>
+<style>
+/* ------------------------------------------------------------------
+   Tokens
+   Kortet är ett registerkort: linjerat på framsidan, rutat på baksidan,
+   en röd linje under rubrikraden. Skrivbordet runt omkring är svalt och tyst.
+   ------------------------------------------------------------------ */
+:root {
+  --desk: #d6dce3;
+  --desk-ink: #1e2b3c;
+  --desk-muted: #536277;
+  --desk-line: rgba(30, 43, 60, .22);
+  --desk-well: rgba(30, 43, 60, .09);
+
+  --paper: #fffef9;
+  --ink: #1e2b3c;
+  --ink-soft: #56647a;
+  --rule: #b3cce4;
+  --rule-soft: #dde8f2;
+  --margin: #d9464b;
+
+  --pen: #2451a6;
+  --pen-strong: #1b3f85;
+  --focus: #2451a6;
+
+  --right: #1d7f47;
+  --right-bg: #e4f3e9;
+  --wrong: #c2363b;
+  --wrong-bg: #fbe8e8;
+
+  --line: 1.9rem;
+  --font-card: Charter, "Bitstream Charter", "Sitka Text", "Iowan Old Style", Cambria, "Noto Serif", Georgia, serif;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --shadow-card: 0 1px 1px rgba(30, 43, 60, .10), 0 3px 6px rgba(30, 43, 60, .10), 0 18px 34px -16px rgba(30, 43, 60, .45);
+  --shadow-strip: 0 1px 1px rgba(30, 43, 60, .10), 0 2px 5px rgba(30, 43, 60, .10);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --desk: #1b222b;
+    --desk-ink: #e5eaf0;
+    --desk-muted: #9aa8b8;
+    --desk-line: rgba(229, 234, 240, .24);
+    --desk-well: rgba(229, 234, 240, .09);
+    --paper: #f3f0e6;
+    --pen: #3a6bd0;
+    --pen-strong: #2f5cb8;
+    --focus: #8fb0ff;
+    --shadow-card: 0 1px 1px rgba(0, 0, 0, .4), 0 4px 8px rgba(0, 0, 0, .35), 0 22px 40px -18px rgba(0, 0, 0, .8);
+    --shadow-strip: 0 1px 1px rgba(0, 0, 0, .4), 0 2px 6px rgba(0, 0, 0, .3);
+  }
+}
+
+/* ------------------------------------------------------------------
+   Bas
+   ------------------------------------------------------------------ */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--desk);
+  color: var(--desk-ink);
+  font: 1rem/1.5 var(--font-ui);
+}
+button, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+[hidden] { display: none !important; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ------------------------------------------------------------------
+   Topprad
+   ------------------------------------------------------------------ */
+.topbar {
+  width: 100%;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1rem clamp(1rem, 4vw, 2rem) .5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.brand { display: flex; align-items: center; gap: .6rem; font-weight: 600; min-width: 0; }
+.brand-mark { width: 28px; height: 22px; flex: none; }
+.brand-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.modes { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--desk-well); }
+.modes button {
+  border: 0;
+  background: transparent;
+  padding: .45rem .95rem;
+  border-radius: 999px;
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--desk-muted);
+  cursor: pointer;
+}
+.modes button[aria-pressed="true"] { background: var(--pen); color: #fff; }
+.modes button:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ------------------------------------------------------------------
+   Layout
+   ------------------------------------------------------------------ */
+main {
+  flex: 1;
+  width: 100%;
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: .5rem clamp(1rem, 4vw, 2rem) 3rem;
+}
+
+.progress { margin: .25rem 0 1.4rem; }
+.progress-row { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; font-size: .92rem; }
+.progress-label { font-weight: 600; }
+.progress-aside { color: var(--desk-muted); }
+.progress-track { height: 4px; margin-top: .5rem; border-radius: 2px; background: var(--desk-well); overflow: hidden; }
+.progress-fill { height: 100%; background: var(--pen); transition: width .3s ease; }
+
+/* ------------------------------------------------------------------
+   Papper (registerkortet)
+   ------------------------------------------------------------------ */
+.paper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--paper);
+  color: var(--ink);
+  border-radius: 3px;
+  box-shadow: var(--shadow-card);
+  font-family: var(--font-card);
+}
+.paper-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  min-height: 2.6rem;
+  padding: .7rem 1.4rem .4rem;
+  border-bottom: 2px solid var(--margin);
+  font: 500 .85rem/1.2 var(--font-ui);
+  color: var(--ink-soft);
+}
+.paper-head-aside { display: inline-flex; align-items: center; gap: .35rem; }
+.paper-head-aside svg { width: 14px; height: 14px; }
+
+/* Linjerat: varje textrad ligger på en blå linje. All text i .ruled
+   använder line-height var(--line) och marginaler i hela rader. */
+.ruled {
+  flex: 1;
+  padding: 0 1.4rem var(--line);
+  line-height: var(--line);
+  background-image: linear-gradient(to bottom, transparent calc(var(--line) - 1px), var(--rule) calc(var(--line) - 1px));
+  background-size: 100% var(--line);
+  background-origin: content-box;
+}
+/* Rutat: baksidan är skolans rutade papper, två rutor per textrad. */
+.squared {
+  flex: 1;
+  padding: 0 1.4rem var(--line);
+  line-height: var(--line);
+  background-image:
+    linear-gradient(to bottom, transparent calc(var(--line) / 2 - 1px), var(--rule-soft) calc(var(--line) / 2 - 1px)),
+    linear-gradient(to right, transparent calc(var(--line) / 2 - 1px), var(--rule-soft) calc(var(--line) / 2 - 1px));
+  background-size: calc(var(--line) / 2) calc(var(--line) / 2);
+  background-origin: content-box;
+}
+/* Alla element på linjerat papper nollställs; avstånd sätts i hela rader. */
+.ruled *, .squared * { margin: 0; }
+
+.card-text {
+  font-size: clamp(1.2rem, 1rem + 1vw, 1.45rem);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+.card-text.is-medium { font-size: clamp(1.1rem, 1rem + .5vw, 1.25rem); }
+.card-text.is-long { font-size: 1.05rem; }
+.card-lead { font: 600 .9rem/var(--line) var(--font-ui); color: var(--right); }
+.card-lead + .card-text { margin-top: 0; }
+
+/* ------------------------------------------------------------------
+   Studiekort med 3D-vändning
+   ------------------------------------------------------------------ */
+.quiz-card .ruled { min-height: calc(var(--line) * 3); }
+
+.flip-scene {
+  perspective: 1600px;
+  cursor: pointer;
+  touch-action: pan-y;
+  border-radius: 4px;
+  -webkit-tap-highlight-color: transparent;
+}
+.flip-card {
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform .6s cubic-bezier(.3, .7, .2, 1);
+}
+.flip-card.is-flipped { transform: rotateY(180deg); }
+.flip-card.no-anim { transition: none; }
+.flip-card > .face {
+  grid-area: 1 / 1;
+  min-height: 17rem;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.flip-card > .face-back { transform: rotateY(180deg); }
+
+.flip-scene.enter-next { animation: enter-next .24s ease-out; }
+.flip-scene.enter-prev { animation: enter-prev .24s ease-out; }
+@keyframes enter-next { from { opacity: 0; transform: translateX(28px); } }
+@keyframes enter-prev { from { opacity: 0; transform: translateX(-28px); } }
+
+.nav { display: flex; justify-content: space-between; gap: .75rem; margin-top: 1.5rem; }
+.hint { margin: 1rem 0 0; text-align: center; font-size: .85rem; color: var(--desk-muted); }
+@media (hover: none) { .hint { display: none; } }
+
+/* ------------------------------------------------------------------
+   Knappar
+   ------------------------------------------------------------------ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  min-height: 44px;
+  padding: .7rem 1.25rem;
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  font-weight: 600;
+  font-size: .95rem;
+  line-height: 1.2;
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn-primary { background: var(--pen); color: #fff; }
+.btn-primary:hover { background: var(--pen-strong); }
+.btn-ghost { background: transparent; color: var(--desk-ink); border-color: var(--desk-line); }
+.btn-ghost:hover { border-color: var(--desk-ink); }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn:disabled:hover { border-color: var(--desk-line); }
+.paper .btn-ghost { color: var(--ink); border-color: rgba(30, 43, 60, .25); }
+.paper .btn-ghost:hover { border-color: var(--ink); }
+.actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.5rem; }
+.actions.end { justify-content: flex-end; }
+
+/* ------------------------------------------------------------------
+   Quiz
+   ------------------------------------------------------------------ */
+.options { list-style: none; margin: 1.25rem 0 0; padding: 0; display: grid; gap: .6rem; }
+.option {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: .85rem;
+  padding: .8rem 1rem;
+  text-align: left;
+  background: var(--paper);
+  color: var(--ink);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  box-shadow: var(--shadow-strip);
+  font-size: 1rem;
+  line-height: 1.45;
+  cursor: pointer;
+  transition: border-color .15s, background-color .15s, opacity .15s;
+}
+.option:hover:not(:disabled) { border-color: var(--pen); }
+.option:disabled { cursor: default; }
+.option-key {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-top: -.1rem;
+  border: 1.5px solid var(--ink-soft);
+  border-radius: 50%;
+  font-size: .85rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.option-text { overflow-wrap: anywhere; white-space: pre-line; }
+.option.is-correct { border-color: var(--right); background: var(--right-bg); }
+.option.is-correct .option-key { background: var(--right); border-color: var(--right); color: #fff; }
+.option.is-wrong { border-color: var(--wrong); background: var(--wrong-bg); }
+.option.is-wrong .option-key { background: var(--wrong); border-color: var(--wrong); color: #fff; }
+.option.is-dim { color: #8a94a3; box-shadow: none; }
+.option.is-dim .option-key { color: #a3acb8; border-color: #c3c9d1; }
+
+.explanation { margin-top: var(--line) !important; }
+.explanation-label { font: 600 .85rem/var(--line) var(--font-ui); color: var(--ink-soft); margin: 0; }
+.explanation-text { margin: 0; font-size: 1.05rem; white-space: pre-line; overflow-wrap: anywhere; }
+
+/* Stämpeln: den enda stora gesten i gränssnittet. */
+.stamp {
+  position: absolute;
+  top: .45rem;
+  right: 1.1rem;
+  padding: .3rem .75rem .35rem;
+  border: 3px solid currentColor;
+  border-radius: 6px;
+  font: 800 1.3rem/1 var(--font-ui);
+  letter-spacing: .03em;
+  color: var(--right);
+  background: rgba(255, 255, 255, .45);
+  opacity: .9;
+  transform: rotate(-8deg);
+  animation: stamp .22s cubic-bezier(.2, .9, .3, 1.2) both;
+  pointer-events: none;
+}
+.stamp.is-wrong { color: var(--wrong); transform: rotate(6deg); animation-name: stamp-wrong; }
+@keyframes stamp { from { opacity: 0; transform: rotate(-8deg) scale(1.9); } }
+@keyframes stamp-wrong { from { opacity: 0; transform: rotate(6deg) scale(1.9); } }
+
+/* ------------------------------------------------------------------
+   Resultat
+   ------------------------------------------------------------------ */
+.result-title { font-size: clamp(1.35rem, 1.1rem + 1.2vw, 1.75rem); font-weight: 700; line-height: var(--line); padding-right: 6.5rem; }
+.result-message { font-size: 1.05rem; padding-right: 6.5rem; }
+.grade {
+  position: absolute;
+  top: 2.9rem;
+  right: .9rem;
+  width: 6.2rem;
+  height: 4.4rem;
+  color: var(--margin);
+}
+.grade path { fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 0; animation: draw .7s .15s ease-out both; }
+.grade text { fill: currentColor; font: italic 700 26px var(--font-card); }
+@keyframes draw { from { stroke-dashoffset: 1; } }
+.review-heading { margin-top: var(--line) !important; font: 600 .85rem/var(--line) var(--font-ui); color: var(--ink-soft); }
+.review { list-style: none; padding: 0 !important; }
+.review li + li { margin-top: var(--line); }
+.review-q { font-weight: 700; font-size: 1.02rem; white-space: pre-line; }
+.review-a { font-size: .98rem; white-space: pre-line; }
+.review-a.is-yours { color: var(--wrong); }
+.review-a.is-right { color: var(--right); }
+
+/* ------------------------------------------------------------------
+   Meddelanden: rättelser, varningar, fel
+   ------------------------------------------------------------------ */
+.notice {
+  margin: 0 0 1.25rem;
+  border: 1px dashed var(--desk-line);
+  border-radius: 8px;
+  font-size: .9rem;
+}
+.notice > summary { padding: .6rem .9rem; cursor: pointer; color: var(--desk-muted); }
+.notice > summary:hover { color: var(--desk-ink); }
+.notice-body { padding: 0 .9rem .9rem; }
+.notice-body p { margin: .5rem 0 .25rem; font-weight: 600; }
+.notice-body ul { margin: 0 0 .5rem; padding-left: 1.2rem; }
+.notice-body .btn { min-height: 36px; padding: .45rem .9rem; font-size: .85rem; margin-top: .5rem; }
+
+.page-title { font-size: clamp(1.3rem, 1.1rem + 1vw, 1.6rem); font-weight: 700; line-height: var(--line); }
+.page-text { font-size: 1.02rem; }
+.page-text + .page-text { margin-top: var(--line) !important; }
+.paper-actions { padding: 0 1.4rem 1.4rem; display: flex; flex-wrap: wrap; gap: .75rem; font-family: var(--font-ui); }
+.paper.is-error .paper-head { color: var(--wrong); }
+
+.field { display: block; padding: 0 1.4rem 1rem; font-family: var(--font-ui); }
+.field-label { display: block; font-size: .85rem; font-weight: 600; color: var(--ink-soft); margin-bottom: .35rem; }
+.field textarea {
+  width: 100%;
+  min-height: 9rem;
+  padding: .7rem .8rem;
+  border: 1.5px solid rgba(30, 43, 60, .25);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: .85rem/1.5 ui-monospace, "SFMono-Regular", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  resize: vertical;
+}
+.field textarea:focus-visible { outline-offset: 1px; }
+.field-error { margin: .4rem 0 0; color: var(--wrong); font-size: .9rem; }
+
+.diagnostics { margin: 0 1.4rem 1.4rem; border-top: 1px solid rgba(30, 43, 60, .15); font-family: var(--font-ui); font-size: .92rem; }
+.diagnostics > summary { padding: .9rem 0 .4rem; font-weight: 600; cursor: pointer; color: var(--pen); }
+.diagnostics h3 { margin: 1rem 0 .35rem; font-size: .85rem; color: var(--ink-soft); }
+.diagnostics ul { margin: 0; padding-left: 1.2rem; }
+.diagnostics .field { padding: 0; margin-top: 1rem; }
+.diagnostics .actions { margin-top: .75rem; }
+.diagnostics details { margin-top: 1rem; }
+.diagnostics details > summary { cursor: pointer; color: var(--ink-soft); }
+.error-message { margin: 0; }
+.error-raw { margin: .25rem 0 0; color: var(--ink-soft); font-size: .85rem; overflow-wrap: anywhere; }
+.snippet {
+  margin: .35rem 0 0;
+  padding: .6rem .75rem;
+  background: #f4f1ea;
+  border-radius: 6px;
+  font: .82rem/1.5 ui-monospace, "SFMono-Regular", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+.snippet mark { background: var(--wrong); color: #fff; border-radius: 2px; padding: 0 1px; }
+.code-line { margin: 1rem 0 0; font-size: .85rem; color: var(--desk-muted); text-align: center; }
+code { font-family: ui-monospace, "SFMono-Regular", "DejaVu Sans Mono", Menlo, Consolas, monospace; font-size: .9em; }
+
+@media (max-width: 30rem) {
+  :root { --line: 1.8rem; }
+  .flip-card > .face { min-height: 15rem; }
+  .paper-head, .ruled, .squared { padding-left: 1.1rem; padding-right: 1.1rem; }
+  .result-title, .result-message { padding-right: 0; }
+  .grade { position: static; display: block; margin: 0 0 .25rem auto; }
+  .nav .btn { flex: 1; }
+  .nav-extra { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-delay: 0s !important;
+    transition-duration: .01ms !important;
+  }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 28 22" aria-hidden="true">
+      <rect x="5.5" y="1.5" width="21" height="14" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".45"/>
+      <rect x="1.5" y="6" width="21" height="14" rx="1.5" style="fill: var(--paper)" stroke="currentColor" stroke-width="1.5"/>
+      <line x1="2.4" y1="10" x2="21.6" y2="10" style="stroke: var(--margin)" stroke-width="1.5"/>
+    </svg>
+    <span class="brand-text" id="brand-text">Studiekort och quiz</span>
+  </div>
+  <div class="modes" id="modes" role="group" aria-label="Visningsläge" hidden>
+    <button type="button" data-mode="cards" aria-pressed="false">Studiekort</button>
+    <button type="button" data-mode="quiz" aria-pressed="false">Quiz</button>
+  </div>
+</header>
+
+<main id="app">
+  <noscript>
+    <p>Den här sidan behöver JavaScript för att visa studiekort och quiz.</p>
+  </noscript>
+</main>
+
+<div class="sr-only" id="announcer" aria-live="polite"></div>
+
+<script>
+'use strict';
+
+/* ====================================================================
+   1. SANERING OCH REPARATION AV JSON
+   Rena funktioner utan DOM-beroenden. Ordningen följer kravspecen:
+   + → %20 och URL-avkodning, HTML-entiteter, markdown-block och skräp
+   runt datan, och sist en tokeniserare som rättar syntaxen
+   (enkelfnuttar, slutkommatecken, backslashes m.m.) utan att förstöra
+   text som redan är korrekt.
+   ==================================================================== */
+// ==SANITIZER-START==
+
+class LoadError extends Error {
+  constructor(kind, message, details = {}) {
+    super(message);
+    this.name = 'LoadError';
+    this.kind = kind;
+    Object.assign(this, details);
+  }
+}
+
+/** Läser type och data direkt ur den råa URL:en. URLSearchParams används
+ *  inte, eftersom den delar datan vid varje & och inte tål &amp;data=. */
+function readUrlParams(href) {
+  const start = href.search(/[?#]/);
+  const query = start >= 0 ? href.slice(start + 1) : '';
+  const dataMatch = /(?:^|[?&#;])data=/i.exec(query);
+  const findType = (part) => {
+    const m = /(?:^|[?&#;])type=([^&#;]*)/i.exec(part);
+    return m ? safeDecodeURIComponent(m[1]) : null;
+  };
+
+  if (!dataMatch) return { type: findType(query), data: null };
+
+  let data = query.slice(dataMatch.index + dataMatch[0].length);
+  let type = findType(query.slice(0, dataMatch.index));
+
+  // Parametrar efter datans sista slutparentes (&type=quiz, &utm_source=…)
+  // hör inte till datan. type plockas upp, resten tas bort i tysthet.
+  const lastEnd = Math.max(
+    data.lastIndexOf(']') + 1,
+    data.lastIndexOf('}') + 1,
+    ...['%5D', '%5d', '%7D', '%7d'].map((s) => {
+      const k = data.lastIndexOf(s);
+      return k === -1 ? 0 : k + 3;
+    }));
+  const tail = data.slice(lastEnd).replace(/(?:&amp;|[?&#;])([a-z_][\w-]*)=([^&#;]*)/gi, (_, key, value) => {
+    if (!type && key.toLowerCase() === 'type') type = safeDecodeURIComponent(value);
+    return '';
+  });
+  data = data.slice(0, lastEnd) + tail;
+  return { type, data };
+}
+
+function normalizeType(type) {
+  if (!type) return null;
+  const t = String(type).trim().toLowerCase();
+  if (/^(quiz+|quizzes|test|fr[aå]gor|fraagor)$/.test(t)) return 'quiz';
+  if (/^(cards?|flashcards?|kort|studiekort)$/.test(t)) return 'cards';
+  return null;
+}
+
+/** decodeURIComponent som aldrig kastar: trasiga %-sekvenser (t.ex. "50%")
+ *  lämnas kvar, och ensamma Latin-1-byte (%E5 = å) tolkas som Latin-1. */
+function safeDecodeURIComponent(text) {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text.replace(/(?:%[0-9a-f]{2})+/gi, decodePercentRun);
+  }
+}
+
+function decodePercentRun(run) {
+  const bytes = run.match(/%[0-9a-f]{2}/gi).map((hex) => parseInt(hex.slice(1), 16));
+  const utf8 = new TextDecoder('utf-8', { fatal: true });
+  let out = '';
+  for (let i = 0; i < bytes.length;) {
+    const b = bytes[i];
+    const size = b < 0x80 ? 1 : b >= 0xf0 ? 4 : b >= 0xe0 ? 3 : b >= 0xc0 ? 2 : 0;
+    if (size > 1) {
+      try {
+        out += utf8.decode(new Uint8Array(bytes.slice(i, i + size)));
+        i += size;
+        continue;
+      } catch { /* inte giltig UTF-8, faller igenom till Latin-1 */ }
+    }
+    out += String.fromCharCode(b);
+    i += 1;
+  }
+  return out;
+}
+
+const NAMED_ENTITIES = new Map(Object.entries({
+  quot: '"', amp: '&', lt: '<', gt: '>', apos: "'", nbsp: ' ', shy: '',
+  ldquo: '“', rdquo: '”', lsquo: '‘', rsquo: '’', laquo: '«', raquo: '»',
+  hellip: '…', ndash: '–', mdash: '—',
+  aring: 'å', Aring: 'Å', auml: 'ä', Auml: 'Ä', ouml: 'ö', Ouml: 'Ö',
+  eacute: 'é', Eacute: 'É', uuml: 'ü', Uuml: 'Ü',
+}));
+
+/** Avkodar namngivna och numeriska entiteter, även dubbelkodade (&amp;quot;). */
+function decodeHtmlEntities(text) {
+  let current = text;
+  for (let pass = 0; pass < 4; pass++) {
+    const next = current.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z][a-z0-9]*);/gi, (match, name) => {
+      if (name[0] === '#') {
+        const hex = name[1] === 'x' || name[1] === 'X';
+        const code = hex ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+        return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
+      }
+      return NAMED_ENTITIES.get(name) ?? NAMED_ENTITIES.get(name.toLowerCase()) ?? match;
+    });
+    if (next === current) break;
+    current = next;
+  }
+  return current;
+}
+
+/** Klipper bort allt före datans början och efter sista ] eller }. */
+function trimToJsonBounds(text) {
+  const arrayOfObjects = text.search(/\[\s*\{/);
+  const first = arrayOfObjects >= 0 ? arrayOfObjects : text.search(/[\[{]/);
+  if (first === -1) return text.trim();
+  const last = Math.max(text.lastIndexOf(']'), text.lastIndexOf('}'));
+  return (last > first ? text.slice(first, last + 1) : text.slice(first)).trim();
+}
+
+/** [{\"id\":1}] – JSON som strängifierats en gång för mycket. */
+function unwrapDoubleEscaped(text) {
+  let current = text;
+  for (let pass = 0; pass < 3 && /^[\s[{]*\\+"/.test(current); pass++) {
+    try {
+      current = JSON.parse(`"${current}"`);
+    } catch {
+      current = current.replace(/\\\\/g, '\u0000').replace(/\\"/g, '"').replace(/\u0000/g, '\\');
+    }
+  }
+  return current;
+}
+
+const QUOTE_KIND = new Map([
+  ['"', 'dq'], ["'", 'sq'],
+  ['“', 'cd'], ['”', 'cd'], ['„', 'cd'], ['‟', 'cd'],
+  ['‘', 'cs'], ['’', 'cs'], ['‚', 'cs'], ['‛', 'cs'],
+]);
+const QUOTE_CLOSERS = { dq: '"', sq: "'’", cd: '"“”„‟', cs: "'‘’‛" };
+const LITERALS = new Map([
+  ['true', 'true'], ['false', 'false'], ['null', 'null'],
+  ['True', 'true'], ['False', 'false'], ['None', 'null'],
+  ['TRUE', 'true'], ['FALSE', 'false'], ['NULL', 'null'],
+  ['undefined', 'null'], ['NaN', 'null'],
+]);
+const FIX_BACKSLASH = 'Felaktiga backslashes (t.ex. \\[ och \\]) togs bort';
+const VALID_NUMBER = /^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$/;
+
+/**
+ * Går igenom texten tecken för tecken och bygger om den som giltig JSON.
+ * Tokeniseraren vet alltid om den står inuti en sträng, så apostrofer i
+ * text ("It's", "Kalles") och kommatecken i meningar lämnas orörda.
+ * Giltig JSON passerar oförändrad.
+ */
+function repairJsonSyntax(src, log) {
+  const fixes = new Set();
+  const out = [];
+  const stack = [];
+  let prev = null; // null | 'open' | 'colon' | 'comma' | 'value'
+  let topLevelValues = 0;
+  const n = src.length;
+
+  // Nästa betydelsebärande tecken; blanksteg och lösa backslashes hoppas över.
+  const peek = (from) => {
+    let j = from;
+    let newline = false;
+    while (j < n && (/\s/.test(src[j]) || src[j] === '\\')) {
+      if (src[j] === '\n') newline = true;
+      j++;
+    }
+    return { ch: j < n ? src[j] : '', newline };
+  };
+
+  const startValue = () => {
+    if (prev === 'value') {
+      out.push(',');
+      fixes.add('Saknade kommatecken lades till');
+    }
+    if (stack.length === 0) topLevelValues++;
+  };
+
+  const dropTrailingComma = () => {
+    for (let k = out.length - 1; k >= 0; k--) {
+      if (out[k] === ',') { out.splice(k, 1); return; }
+      if (!/^\s*$/.test(out[k])) return;
+    }
+  };
+
+  const readString = (from, kind) => {
+    const closers = QUOTE_CLOSERS[kind];
+    let buf = '"';
+    let j = from;
+    let closed = false;
+
+    while (j < n) {
+      const ch = src[j];
+
+      if (ch === '\\') {
+        let k = j;
+        while (src[k] === '\\') k++;
+        if (src[k] === '[' || src[k] === ']') { fixes.add(FIX_BACKSLASH); j = k; continue; }
+        const next = src[j + 1];
+        if (next === undefined) { fixes.add(FIX_BACKSLASH); j++; continue; }
+        if ('"\\/bfnrt'.includes(next)) { buf += '\\' + next; j += 2; continue; }
+        if (next === 'u' && /^[0-9a-fA-F]{4}$/.test(src.slice(j + 2, j + 6))) { buf += src.slice(j, j + 6); j += 6; continue; }
+        if (next === "'") { buf += "'"; j += 2; continue; }
+        fixes.add(FIX_BACKSLASH);
+        j++;
+        continue;
+      }
+
+      if (closers.includes(ch)) {
+        // Ett citattecken avslutar bara strängen om det följs av , : ] } eller slutet.
+        // Annars är det ett citattecken inuti texten: "Vad gör "const"?"
+        const ahead = peek(j + 1);
+        if (ahead.ch === '' || ',:]}'.includes(ahead.ch) || (ahead.newline && QUOTE_KIND.has(ahead.ch))) {
+          closed = true;
+          j++;
+          break;
+        }
+        if (ch === '"') { buf += '\\"'; fixes.add('Citattecken inuti text escapades'); }
+        else buf += ch;
+        j++;
+        continue;
+      }
+
+      const code = ch.charCodeAt(0);
+      if (code < 0x20) {
+        if (ch === '\n') buf += '\\n';
+        else if (ch === '\t') buf += '\\t';
+        else if (ch !== '\r') buf += '\\u' + code.toString(16).padStart(4, '0');
+        fixes.add('Radbrytningar i text escapades');
+        j++;
+        continue;
+      }
+
+      if (ch === '"') { buf += '\\"'; fixes.add('Citattecken inuti text escapades'); j++; continue; }
+
+      buf += ch;
+      j++;
+    }
+
+    if (!closed) fixes.add('Oavslutad text stängdes');
+    out.push(buf + '"');
+    return j;
+  };
+
+  let i = 0;
+  while (i < n) {
+    const ch = src[i];
+
+    if (/\s/.test(ch)) { out.push(ch); i++; continue; }
+
+    if (ch === '{' || ch === '[') {
+      startValue();
+      stack.push(ch);
+      out.push(ch);
+      prev = 'open';
+      i++;
+      continue;
+    }
+
+    if (ch === '}' || ch === ']') {
+      const opener = ch === '}' ? '{' : '[';
+      if (!stack.includes(opener)) { fixes.add('Överflödiga slutparenteser togs bort'); i++; continue; }
+      if (prev === 'comma') { dropTrailingComma(); fixes.add('Slutkommatecken togs bort'); }
+      else if (prev === 'colon') { out.push('null'); fixes.add('Tomma värden ersattes med null'); }
+      while (stack[stack.length - 1] !== opener) {
+        out.push(stack.pop() === '{' ? '}' : ']');
+        fixes.add('Saknade slutparenteser lades till');
+      }
+      stack.pop();
+      out.push(ch);
+      prev = 'value';
+      i++;
+      continue;
+    }
+
+    if (ch === ':') {
+      if (prev === 'value') { out.push(':'); prev = 'colon'; }
+      else fixes.add('Överflödiga kolon togs bort');
+      i++;
+      continue;
+    }
+
+    if (ch === ',') {
+      if (prev === 'value') { out.push(','); prev = 'comma'; }
+      else if (prev === 'colon') { out.push('null', ','); prev = 'comma'; fixes.add('Tomma värden ersattes med null'); }
+      else fixes.add('Överflödiga kommatecken togs bort');
+      i++;
+      continue;
+    }
+
+    if (QUOTE_KIND.has(ch)) {
+      const kind = QUOTE_KIND.get(ch);
+      startValue();
+      if (kind === 'sq') fixes.add('Enkelfnuttar byttes mot dubbelfnuttar');
+      else if (kind !== 'dq') fixes.add('Typografiska citattecken byttes mot raka');
+      i = readString(i + 1, kind);
+      prev = 'value';
+      continue;
+    }
+
+    if (ch === '/' && (src[i + 1] === '/' || src[i + 1] === '*')) {
+      const block = src[i + 1] === '*';
+      const end = block ? src.indexOf('*/', i + 2) : src.indexOf('\n', i + 2);
+      fixes.add('Kommentarer togs bort');
+      i = end === -1 ? (block ? n : i + 2) : end + (block ? 2 : 1);
+      continue;
+    }
+
+    if (/[-+.\d]/.test(ch)) {
+      let j = i;
+      while (j < n && /[-+.\deE]/.test(src[j])) j++;
+      const token = src.slice(i, j);
+      i = j;
+      if (!/\d/.test(token)) { fixes.add('Okända tecken utanför text togs bort'); continue; }
+      startValue();
+      if (VALID_NUMBER.test(token)) {
+        out.push(token);
+      } else {
+        const num = Number(token.replace(/^\+/, ''));
+        if (Number.isFinite(num)) { out.push(String(num)); fixes.add('Talformat rättades'); }
+        else { out.push(JSON.stringify(token)); fixes.add('Text utan citattecken fick citattecken'); }
+      }
+      prev = 'value';
+      continue;
+    }
+
+    if (/[\p{L}_$]/u.test(ch)) {
+      let j = i;
+      while (j < n && /[\p{L}\p{N}_$]/u.test(src[j])) j++;
+      const word = src.slice(i, j);
+      const inValuePosition = prev === 'colon';
+      const isKey = peek(j).ch === ':' && stack[stack.length - 1] === '{';
+      startValue();
+      if (isKey) {
+        out.push(JSON.stringify(word));
+        fixes.add('Nycklar utan citattecken fick citattecken');
+        i = j;
+      } else if (LITERALS.has(word)) {
+        const literal = LITERALS.get(word);
+        if (literal !== word) fixes.add('True/False/None gjordes om till JSON-värden');
+        out.push(literal);
+        i = j;
+      } else if (inValuePosition) {
+        // "flashcard_back": Ett bibliotek för UI  → läs till , } ] eller radslut
+        let k = j;
+        while (k < n && !/[,}\]\n]/.test(src[k])) k++;
+        out.push(JSON.stringify(src.slice(i, k).trim()));
+        fixes.add('Text utan citattecken fick citattecken');
+        i = k;
+      } else {
+        out.push(JSON.stringify(word));
+        fixes.add('Text utan citattecken fick citattecken');
+        i = j;
+      }
+      prev = 'value';
+      continue;
+    }
+
+    fixes.add(ch === '\\' ? FIX_BACKSLASH : 'Okända tecken utanför text togs bort');
+    i++;
+  }
+
+  if (prev === 'comma') { dropTrailingComma(); fixes.add('Slutkommatecken togs bort'); }
+  else if (prev === 'colon') { out.push('null'); fixes.add('Tomma värden ersattes med null'); }
+  if (stack.length) {
+    fixes.add('Saknade slutparenteser lades till');
+    while (stack.length) out.push(stack.pop() === '{' ? '}' : ']');
+  }
+
+  let result = out.join('');
+  if (topLevelValues > 1) {
+    result = `[${result}]`;
+    fixes.add('Flera objekt samlades i en lista');
+  }
+  for (const label of fixes) log.push({ label, repair: true });
+  return result;
+}
+
+/** Hela saneringskedjan. Returnerar den lagade texten och en logg över
+ *  vad som ändrades (repair: false = rutinsteg som inte visas som fel). */
+function sanitizeJsonText(input, { fromUrl = false } = {}) {
+  const log = [];
+  let text = String(input ?? '');
+  const step = (label, fn, repair = true) => {
+    const before = text;
+    text = fn(text);
+    if (text.trim() !== before.trim()) log.push({ label, repair });
+  };
+  const looksEncoded = (t) => !/[[{]/.test(t) && /%(5b|7b)/i.test(t);
+
+  if (fromUrl || looksEncoded(text)) {
+    step('Plustecken (+) tolkades som mellanslag', (t) => t.replace(/\+/g, '%20'), false);
+    step('URL-kodningen avkodades', (t) => {
+      let decoded = safeDecodeURIComponent(t);
+      for (let pass = 0; pass < 3 && looksEncoded(decoded); pass++) decoded = safeDecodeURIComponent(decoded);
+      return decoded;
+    }, false);
+  }
+  step('Osynliga tecken (t.ex. mjuka bindestreck från e-post) togs bort',
+    (t) => t.replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, '').replace(/[\u00A0\u202F]/g, ' '));
+  step('HTML-entiteter avkodades (t.ex. &quot; och &amp;)', decodeHtmlEntities);
+  step('Markdown-kodblock (```json) togs bort', (t) => t.replace(/(`{3,}|~{3,})[\w-]*/g, ''));
+  step('Tecken före och efter JSON-datan togs bort', trimToJsonBounds);
+  step('Dubbel-escapad JSON packades upp', unwrapDoubleEscaped);
+  // Utan [ eller { finns ingen JSON att laga; låt JSON.parse ge ett ärligt fel.
+  if (/[[{]/.test(text)) text = repairJsonSyntax(text, log);
+  return { text, log };
+}
+
+/** Delar upp en lista på översta nivån i sina element (för räddning av
+ *  delvis trasig data). */
+function splitTopLevelArray(text) {
+  const t = text.trim();
+  if (t[0] !== '[') return null;
+  const parts = [];
+  let depth = 0;
+  let inString = false;
+  let start = 1;
+  let closed = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (inString) {
+      if (c === '\\') i++;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === '[' || c === '{') depth++;
+    else if (c === ']' || c === '}') {
+      depth--;
+      if (depth === 0) { parts.push(t.slice(start, i)); closed = true; break; }
+    } else if (c === ',' && depth === 1) {
+      parts.push(t.slice(start, i));
+      start = i + 1;
+    }
+  }
+  if (!closed) parts.push(t.slice(start));
+  return parts.map((p) => p.trim()).filter(Boolean);
+}
+
+/** Sanerar och tolkar. Om hela texten inte går att tolka räddas de
+ *  element som går att läsa var för sig. Kastar LoadError('parse'). */
+function parseJsonData(input, options) {
+  const { text, log } = sanitizeJsonText(input, options);
+  try {
+    return { data: JSON.parse(text), text, log, skipped: [], total: null };
+  } catch (error) {
+    const parts = splitTopLevelArray(text);
+    if (parts && parts.length > 1) {
+      const data = [];
+      const skipped = [];
+      parts.forEach((part, index) => {
+        try { data.push(JSON.parse(part)); } catch { skipped.push(index + 1); }
+      });
+      if (data.length) return { data, text, log, skipped, total: parts.length, cause: error };
+    }
+    throw new LoadError('parse', error.message, { cause: error, text, log });
+  }
+}
+
+/** Hittar felets position i JSON.parse-meddelandet (Chrome, Firefox, Safari). */
+function findErrorPosition(message, text) {
+  let m = /position\s+(\d+)/i.exec(message);
+  if (m) return Number(m[1]);
+  m = /line\s+(\d+)\s+column\s+(\d+)/i.exec(message);
+  if (m) {
+    const lines = text.split('\n');
+    let index = 0;
+    for (let k = 0; k < Number(m[1]) - 1 && k < lines.length; k++) index += lines[k].length + 1;
+    return index + Number(m[2]) - 1;
+  }
+  return -1;
+}
+
+// ==SANITIZER-END==
+
+/* ====================================================================
+   2. NORMALISERING AV FRÅGORNA
+   Tål vanliga varianter: andra fältnamn, bokstäver som rätt svar,
+   svaret som text, 1-baserade index och data inslagen i ett objekt.
+   ==================================================================== */
+const FIELDS = {
+  question: ['question', 'fråga', 'fraga', 'q', 'front', 'prompt', 'term'],
+  options: ['options', 'alternatives', 'alternativ', 'svarsalternativ', 'choices', 'answers'],
+  correct: ['correct', 'correct_index', 'correctindex', 'answer_index', 'answerindex', 'correct_answer', 'correctanswer', 'answer', 'rätt', 'ratt'],
+  back: ['flashcard_back', 'back', 'explanation', 'förklaring', 'forklaring', 'definition', 'svar'],
+};
+
+function lowerKeys(obj) {
+  const map = new Map();
+  for (const [key, value] of Object.entries(obj)) {
+    const k = key.trim().toLowerCase();
+    if (!map.has(k)) map.set(k, value);
+  }
+  return map;
+}
+
+function pick(fields, keys) {
+  for (const key of keys) {
+    const value = fields.get(key);
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return undefined;
+}
+
+function toText(value) {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const inner = value.text ?? value.label ?? value.value ?? value.answer;
+    if (inner !== undefined) return toText(inner);
+  }
+  return '';
+}
+
+function looksLikeItem(value) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    && pick(lowerKeys(value), FIELDS.question) !== undefined;
+}
+
+function findItemsArray(value, depth = 0) {
+  if (depth > 4) return null;
+  if (Array.isArray(value)) {
+    if (value.some(looksLikeItem)) return value;
+    for (const entry of value) {
+      const found = findItemsArray(entry, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (value && typeof value === 'object') {
+    if (looksLikeItem(value)) return [value];
+    for (const entry of Object.values(value)) {
+      const found = findItemsArray(entry, depth + 1);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function draftItem(raw, position) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const fields = lowerKeys(raw);
+  const question = toText(pick(fields, FIELDS.question));
+  if (!question) return null;
+
+  let options = pick(fields, FIELDS.options);
+  if (options && typeof options === 'object' && !Array.isArray(options)) options = Object.values(options);
+  options = Array.isArray(options) ? options.map((o) => toText(o) || '–') : [];
+
+  const rawCorrect = pick(fields, FIELDS.correct);
+  const answerText = typeof fields.get('answer') === 'string' ? fields.get('answer').trim() : '';
+
+  return {
+    id: raw.id ?? position + 1,
+    question,
+    options,
+    rawCorrect: Array.isArray(rawCorrect) ? rawCorrect[0] : rawCorrect,
+    back: toText(pick(fields, FIELDS.back)),
+    answerText,
+  };
+}
+
+function resolveCorrect(value, options, oneBased) {
+  const count = options.length;
+  if (value === undefined || value === null || typeof value === 'boolean' || count === 0) return -1;
+  const str = String(value).trim();
+
+  if (/^-?\d+$/.test(str)) {
+    const n = Number(str) - (oneBased ? 1 : 0);
+    return n >= 0 && n < count ? n : -1;
+  }
+  const needle = str.toLowerCase();
+  const exact = options.findIndex((o) => o.toLowerCase() === needle);
+  if (exact !== -1) return exact;
+  const letter = /^([a-z])(?:$|[).:\s])/i.exec(str);
+  if (letter) {
+    const n = letter[1].toUpperCase().charCodeAt(0) - 65;
+    if (n < count) return n;
+  }
+  return -1;
+}
+
+function plural(n, one, many) { return n === 1 ? one : many; }
+
+function normalizeData(data) {
+  const list = findItemsArray(data);
+  if (!list) {
+    throw new LoadError('shape', 'Datan innehåller ingen lista med frågor.');
+  }
+
+  const warnings = [];
+  const drafts = list.map(draftItem);
+  const items = drafts.filter(Boolean);
+  const missing = drafts.length - items.length;
+  if (!items.length) throw new LoadError('shape', 'Inget av objekten i datan har ett question-fält.');
+  if (missing) warnings.push(`${missing} ${plural(missing, 'objekt', 'objekt')} saknade fråga och hoppades över.`);
+
+  // Är rätt svar numrerade från 1 i hela datan? (Inget 0, men något index = antal alternativ.)
+  const asInt = (v) => (typeof v === 'number' || (typeof v === 'string' && /^\d+$/.test(v.trim())) ? Number(v) : null);
+  const oneBased = items.some((it) => it.options.length && asInt(it.rawCorrect) === it.options.length)
+    && !items.some((it) => asInt(it.rawCorrect) === 0);
+  if (oneBased) warnings.push('Rätt svar var numrerade från 1 i stället för 0 och justerades.');
+
+  for (const item of items) {
+    item.correct = resolveCorrect(item.rawCorrect, item.options, oneBased);
+    if (!item.back && item.answerText && item.correct === -1) item.back = item.answerText;
+    delete item.rawCorrect;
+    delete item.answerText;
+  }
+  return { items, warnings };
+}
+
+const isQuizReady = (item) => item.options.length >= 2 && item.correct >= 0;
+const cardBack = (item) => item.back || (item.correct >= 0 ? item.options[item.correct] : '') || 'Kortet saknar baksida.';
+const letterFor = (index) => String.fromCharCode(65 + index);
+
+/* ====================================================================
+   3. DOM-HJÄLPARE
+   All data från länken sätts som text (textContent), aldrig som HTML.
+   ==================================================================== */
+function h(tag, props, ...children) {
+  const el = document.createElement(tag);
+  for (const [key, value] of Object.entries(props || {})) {
+    if (value === null || value === undefined || value === false) continue;
+    if (key === 'class') el.className = value;
+    else if (key === 'text') el.textContent = value;
+    else if (key.startsWith('on') && typeof value === 'function') el.addEventListener(key.slice(2), value);
+    else el.setAttribute(key, value === true ? '' : String(value));
+  }
+  el.append(...children.flat().filter((c) => c !== null && c !== undefined && c !== false));
+  return el;
+}
+
+function svg(tag, attrs, ...children) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [key, value] of Object.entries(attrs || {})) el.setAttribute(key, String(value));
+  el.append(...children);
+  return el;
+}
+
+const flipIcon = () => svg('svg', { viewBox: '0 0 16 16', 'aria-hidden': 'true' },
+  svg('path', { d: 'M2.5 8a5.5 5.5 0 0 1 9.6-3.7M13.5 8a5.5 5.5 0 0 1-9.6 3.7', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.5', 'stroke-linecap': 'round' }),
+  svg('path', { d: 'M12.6 1.8v2.9H9.7M3.4 14.2v-2.9h2.9', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+
+const $app = document.getElementById('app');
+const $brand = document.getElementById('brand-text');
+const $modes = document.getElementById('modes');
+const $announcer = document.getElementById('announcer');
+
+let keyHandler = null;
+
+function mount(...nodes) {
+  $app.replaceChildren(...nodes.filter(Boolean));
+  if ($app.getBoundingClientRect().top < 0) window.scrollTo(0, 0);
+}
+
+function announce(message) {
+  $announcer.textContent = '';
+  requestAnimationFrame(() => { $announcer.textContent = message; });
+}
+
+function textSizeClass(text) {
+  return text.length > 220 ? 'is-long' : text.length > 110 ? 'is-medium' : '';
+}
+
+function paperHead(left, right) {
+  return h('div', { class: 'paper-head' }, h('span', {}, left), right ? h('span', { class: 'paper-head-aside' }, right) : null);
+}
+
+function buildProgress() {
+  const label = h('span', { class: 'progress-label' });
+  const aside = h('span', { class: 'progress-aside' });
+  const fill = h('div', { class: 'progress-fill' });
+  const track = h('div', { class: 'progress-track', role: 'progressbar', 'aria-label': 'Framsteg', 'aria-valuemin': 0, 'aria-valuemax': 100 }, fill);
+  const root = h('div', { class: 'progress' }, h('div', { class: 'progress-row' }, label, aside), track);
+  const update = (text, fraction, asideText = '') => {
+    label.textContent = text;
+    aside.textContent = asideText;
+    const pct = Math.round(Math.max(0, Math.min(1, fraction)) * 100);
+    fill.style.width = `${pct}%`;
+    track.setAttribute('aria-valuenow', pct);
+  };
+  return { root, update };
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = h('textarea', { style: 'position:fixed;opacity:0;top:0;left:0' });
+    area.value = text;
+    document.body.append(area);
+    area.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    area.remove();
+    return ok;
+  }
+}
+
+function copyButton(label, doneLabel, getText, className = 'btn btn-ghost') {
+  const button = h('button', { type: 'button', class: className }, label);
+  button.addEventListener('click', async () => {
+    const ok = await copyText(getText());
+    button.textContent = ok ? doneLabel : 'Kopieringen misslyckades';
+    setTimeout(() => { button.textContent = label; }, 2200);
+  });
+  return button;
+}
+
+/* ====================================================================
+   4. TILLSTÅND OCH URL
+   ==================================================================== */
+const state = {
+  mode: 'cards',
+  items: [],
+  quizItems: [],
+  repairs: [],
+  warnings: [],
+  card: { index: 0, flipped: false },
+  quiz: { index: 0, answers: [] },
+};
+
+function cleanItems() {
+  return state.items.map(({ id, question, options, correct, back }) => ({ id, question, options, correct, flashcard_back: back }));
+}
+
+function buildShareUrl(mode = state.mode) {
+  const base = location.href.split(/[?#]/)[0];
+  return `${base}?type=${mode}&data=${encodeURIComponent(JSON.stringify(cleanItems()))}`;
+}
+
+/** Byter type i adressfältet utan att röra datan. */
+function updateUrlType(mode) {
+  const href = location.href;
+  const dataAt = href.search(/[?&#;]data=/i);
+  const head = dataAt >= 0 ? href.slice(0, dataAt) : href;
+  const tail = dataAt >= 0 ? href.slice(dataAt) : '';
+  let next;
+  if (/[?&;]type=[^&#;]*/i.test(head)) next = head.replace(/([?&;])type=[^&#;]*/i, `$1type=${mode}`) + tail;
+  else if (tail.startsWith('?')) next = `${head}?type=${mode}&${tail.slice(1)}`;
+  else if (head.includes('?')) next = `${head}&type=${mode}${tail}`;
+  else next = `${head}?type=${mode}${tail}`;
+  if (next !== href) {
+    try { history.replaceState(history.state, '', next); } catch { /* t.ex. file:// i vissa webbläsare */ }
+  }
+}
+
+function setHeader(mode) {
+  if (!mode) {
+    $brand.textContent = 'Studiekort och quiz';
+    $modes.hidden = true;
+    return;
+  }
+  const count = state.items.length;
+  $brand.textContent = `${count} ${plural(count, 'fråga', 'frågor')}`;
+  $modes.hidden = false;
+  for (const button of $modes.querySelectorAll('button')) {
+    button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
+  }
+  const quizButton = $modes.querySelector('[data-mode="quiz"]');
+  quizButton.disabled = state.quizItems.length === 0;
+  quizButton.title = quizButton.disabled ? 'Datan saknar svarsalternativ eller rätt svar' : '';
+}
+
+$modes.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-mode]');
+  if (!button || button.disabled || button.dataset.mode === state.mode) return;
+  setMode(button.dataset.mode);
+});
+
+document.addEventListener('keydown', (event) => {
+  if (!keyHandler || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+  const target = event.target;
+  if (target.closest && target.closest('textarea, input, select, [contenteditable="true"]')) return;
+  keyHandler(event);
+});
+
+/* ====================================================================
+   5. INLÄSNING
+   ==================================================================== */
+function loadData(input, options, requestedType, meta = {}) {
+  let result = null;
+  try {
+    result = parseJsonData(input, options);
+    if (result.skipped.length && result.data.length / result.total < 0.5 && !meta.acceptPartial) {
+      throw new LoadError('partial', 'Stora delar av datan kunde inte läsas.', { cause: result.cause });
+    }
+    startSession(result, requestedType);
+    if (meta.source === 'paste') {
+      try { history.replaceState(null, '', buildShareUrl()); } catch { /* ignoreras */ }
+    }
+  } catch (error) {
+    console.error(error);
+    const loadError = error instanceof LoadError
+      ? error
+      : new LoadError('unknown', error && error.message ? error.message : String(error), { cause: error });
+    loadError.text ??= result && result.text;
+    loadError.log ??= result && result.log;
+    renderError(loadError, { input, options, requestedType, meta, result });
+  }
+}
+
+function startSession(result, requestedType) {
+  const { items, warnings } = normalizeData(result.data);
+  state.items = items;
+  state.quizItems = items.filter(isQuizReady);
+  state.repairs = result.log.filter((entry) => entry.repair).map((entry) => entry.label);
+  state.warnings = warnings;
+  if (result.skipped.length) {
+    state.warnings.unshift(`${result.skipped.length} av ${result.total} objekt var trasiga och kunde inte visas (nr ${result.skipped.join(', ')}).`);
+  }
+  state.card = { index: 0, flipped: false };
+  state.quiz = { index: 0, answers: new Array(state.quizItems.length).fill(null) };
+
+  const mode = normalizeType(requestedType) || 'cards';
+  if (mode === 'quiz' && !state.quizItems.length) {
+    throw new LoadError('mode', 'Ingen fråga har både svarsalternativ och ett giltigt rätt svar.');
+  }
+  setMode(mode, { updateUrl: false });
+}
+
+function setMode(mode, { updateUrl = true } = {}) {
+  state.mode = mode;
+  if (updateUrl) updateUrlType(mode);
+  setHeader(mode);
+  if (mode === 'quiz') {
+    if (state.quiz.index >= state.quizItems.length) renderResult();
+    else renderQuestion();
+  } else {
+    renderCards();
+  }
+}
+
+/** Rättelser och varningar visas diskret ovanför kortet. */
+function buildNotice() {
+  const warnings = [...state.warnings];
+  const notInQuiz = state.items.length - state.quizItems.length;
+  if (state.mode === 'quiz' && notInQuiz > 0) {
+    warnings.push(`${notInQuiz} ${plural(notInQuiz, 'fråga', 'frågor')} saknar svarsalternativ eller rätt svar och visas bara som studiekort.`);
+  }
+  const repairs = state.repairs;
+  if (!warnings.length && !repairs.length) return null;
+
+  const summary = warnings.length === 1 && !repairs.length
+    ? warnings[0]
+    : warnings.length
+      ? 'Delar av datan kunde inte användas. Visa detaljer'
+      : 'Länken innehöll formateringsfel som rättades automatiskt';
+
+  return h('details', { class: 'notice' },
+    h('summary', {}, summary),
+    h('div', { class: 'notice-body' },
+      warnings.length ? [h('p', {}, 'Att känna till'), h('ul', {}, warnings.map((w) => h('li', {}, w)))] : null,
+      repairs.length ? [h('p', {}, 'Rättelser som gjordes'), h('ul', {}, repairs.map((r) => h('li', {}, r)))] : null,
+      repairs.length ? copyButton('Kopiera rättad länk', 'Rättad länk kopierad', () => buildShareUrl()) : null));
+}
+
+/* ====================================================================
+   6. LÄGE 1: STUDIEKORT
+   ==================================================================== */
+function renderCards() {
+  const total = state.items.length;
+  const progress = buildProgress();
+
+  const frontText = h('p', { class: 'card-text' });
+  const backLead = h('p', { class: 'card-lead' });
+  const backText = h('p', { class: 'card-text' });
+
+  const front = h('section', { class: 'paper face face-front' },
+    paperHead('Fråga', [flipIcon(), 'Visa svar']),
+    h('div', { class: 'ruled' }, frontText));
+  const back = h('section', { class: 'paper face face-back', 'aria-hidden': 'true' },
+    paperHead('Svar', [flipIcon(), 'Visa fråga']),
+    h('div', { class: 'squared' }, backLead, backText));
+
+  const card = h('div', { class: 'flip-card' }, front, back);
+  const scene = h('div', { class: 'flip-scene', role: 'button', tabindex: 0 }, card);
+
+  // "kort" döljs på smala skärmar så att knapparna ryms på en rad.
+  const navLabel = (main, extra) => [main, h('span', { class: 'nav-extra' }, extra)];
+  const prevButton = h('button', { type: 'button', class: 'btn btn-ghost' }, navLabel('Föregående', ' kort'));
+  const nextButton = h('button', { type: 'button', class: 'btn btn-primary' });
+
+  const setFlipped = (flipped, animate = true) => {
+    state.card.flipped = flipped;
+    if (!animate) card.classList.add('no-anim');
+    card.classList.toggle('is-flipped', flipped);
+    if (!animate) { void card.offsetWidth; card.classList.remove('no-anim'); }
+    front.setAttribute('aria-hidden', String(flipped));
+    back.setAttribute('aria-hidden', String(!flipped));
+  };
+
+  const flip = () => {
+    setFlipped(!state.card.flipped);
+    const item = state.items[state.card.index];
+    announce(state.card.flipped ? `Svar: ${cardBack(item)}` : `Fråga: ${item.question}`);
+  };
+
+  const show = (index, direction = 0) => {
+    state.card.index = index;
+    const item = state.items[index];
+    if (state.card.flipped) setFlipped(false, false);
+
+    frontText.textContent = item.question;
+    frontText.className = `card-text ${textSizeClass(item.question)}`;
+
+    const backContent = cardBack(item);
+    const correctOption = item.correct >= 0 ? item.options[item.correct] : '';
+    const showLead = correctOption && item.back && correctOption !== item.back;
+    backLead.hidden = !showLead;
+    backLead.textContent = showLead ? `Rätt svar: ${correctOption}` : '';
+    backText.textContent = backContent;
+    backText.className = `card-text ${textSizeClass(backContent)}`;
+
+    progress.update(`Kort ${index + 1} av ${total}`, (index + 1) / total);
+    prevButton.disabled = index === 0;
+    nextButton.replaceChildren(...(index === total - 1 ? ['Börja om'] : navLabel('Nästa', ' kort')));
+
+    if (direction) {
+      scene.classList.remove('enter-next', 'enter-prev');
+      void scene.offsetWidth;
+      scene.classList.add(direction > 0 ? 'enter-next' : 'enter-prev');
+    }
+  };
+
+  const go = (step) => {
+    const next = state.card.index + step;
+    if (next < 0) return;
+    if (next >= total) { show(0, 1); announce('Tillbaka till första kortet'); return; }
+    show(next, step);
+  };
+
+  // Svep åt sidan på mobil byter kort, tryck vänder.
+  let pointerStart = null;
+  let suppressClick = false;
+  scene.addEventListener('pointerdown', (e) => { pointerStart = { x: e.clientX, y: e.clientY }; });
+  scene.addEventListener('pointerup', (e) => {
+    if (!pointerStart) return;
+    const dx = e.clientX - pointerStart.x;
+    const dy = e.clientY - pointerStart.y;
+    pointerStart = null;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      suppressClick = true;
+      go(dx < 0 ? 1 : -1);
+    }
+  });
+  scene.addEventListener('click', () => {
+    if (suppressClick) { suppressClick = false; return; }
+    flip();
+  });
+  scene.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); }
+  });
+  prevButton.addEventListener('click', () => go(-1));
+  nextButton.addEventListener('click', () => go(1));
+
+  keyHandler = (e) => {
+    if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
+    else if ((e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.target === document.body) {
+      e.preventDefault();
+      flip();
+    }
+  };
+
+  mount(
+    buildNotice(),
+    progress.root,
+    scene,
+    h('div', { class: 'nav' }, prevButton, nextButton),
+    h('p', { class: 'hint' }, 'Mellanslag vänder kortet, piltangenterna bläddrar.'));
+  show(state.card.index);
+}
+
+/* ====================================================================
+   7. LÄGE 2: QUIZ
+   ==================================================================== */
+const quizScore = () => state.quiz.answers.reduce((sum, answer, i) => sum + (answer === state.quizItems[i].correct ? 1 : 0), 0);
+
+function renderQuestion() {
+  const { quizItems } = state;
+  const total = quizItems.length;
+  const index = state.quiz.index;
+  const item = quizItems[index];
+  const progress = buildProgress();
+
+  const body = h('div', { class: 'ruled' },
+    h('p', { class: `card-text ${textSizeClass(item.question)}` }, item.question));
+  const paper = h('section', { class: 'paper quiz-card', 'aria-label': `Fråga ${index + 1}` }, paperHead('Fråga'), body);
+
+  const buttons = item.options.map((option, i) => h('button', {
+    type: 'button',
+    class: 'option',
+    'aria-label': `${letterFor(i)}: ${option}`,
+    onclick: () => answer(i),
+  }, h('span', { class: 'option-key', 'aria-hidden': 'true' }, letterFor(i)), h('span', { class: 'option-text' }, option)));
+
+  const actions = h('div', { class: 'actions end' });
+
+  const updateProgress = () => {
+    const answered = state.quiz.answers[index] !== null;
+    const score = quizScore();
+    progress.update(`Fråga ${index + 1} av ${total}`, (index + (answered ? 1 : 0)) / total, `${score} ${plural(score, 'rätt', 'rätt')}`);
+  };
+
+  const next = () => {
+    state.quiz.index += 1;
+    if (state.quiz.index >= total) renderResult();
+    else renderQuestion();
+  };
+
+  const showAnswered = (choice, fresh) => {
+    const correct = item.correct === choice;
+    buttons.forEach((button, i) => {
+      button.disabled = true;
+      if (i === item.correct) {
+        button.classList.add('is-correct');
+        button.firstChild.textContent = '✓';
+      } else if (i === choice) {
+        button.classList.add('is-wrong');
+        button.firstChild.textContent = '✕';
+      } else {
+        button.classList.add('is-dim');
+      }
+    });
+
+    paper.append(h('div', { class: `stamp${correct ? '' : ' is-wrong'}`, 'aria-hidden': 'true' }, correct ? 'Rätt' : 'Fel'));
+    if (item.back) {
+      body.append(h('div', { class: 'explanation' },
+        h('p', { class: 'explanation-label' }, 'Förklaring'),
+        h('p', { class: 'explanation-text' }, item.back)));
+    }
+
+    const last = index === total - 1;
+    const nextButton = h('button', { type: 'button', class: 'btn btn-primary', onclick: next }, last ? 'Visa resultat' : 'Nästa fråga');
+    actions.replaceChildren(nextButton);
+    updateProgress();
+
+    if (fresh) {
+      const verdict = correct ? 'Rätt svar.' : `Fel svar. Rätt svar är ${letterFor(item.correct)}: ${item.options[item.correct]}.`;
+      announce(item.back ? `${verdict} ${item.back}` : verdict);
+      nextButton.focus({ preventScroll: true });
+      nextButton.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    }
+  };
+
+  function answer(choice) {
+    if (state.quiz.answers[index] !== null) return;
+    state.quiz.answers[index] = choice;
+    showAnswered(choice, true);
+  }
+
+  keyHandler = (e) => {
+    const answered = state.quiz.answers[index] !== null;
+    if (!answered) {
+      const key = e.key.toLowerCase();
+      const choice = /^[1-9]$/.test(key) ? Number(key) - 1 : /^[a-z]$/.test(key) ? key.charCodeAt(0) - 97 : -1;
+      if (choice >= 0 && choice < item.options.length) { e.preventDefault(); answer(choice); }
+    } else if ((e.key === 'Enter' || e.key === 'ArrowRight') && !(e.target instanceof HTMLButtonElement)) {
+      e.preventDefault();
+      next();
+    }
+  };
+
+  mount(
+    buildNotice(),
+    progress.root,
+    paper,
+    h('ul', { class: 'options' }, buttons.map((b) => h('li', {}, b))),
+    actions);
+
+  updateProgress();
+  if (state.quiz.answers[index] !== null) showAnswered(state.quiz.answers[index], false);
+}
+
+function renderResult() {
+  const total = state.quizItems.length;
+  const score = quizScore();
+  const ratio = total ? score / total : 0;
+  const emoji = ratio >= 0.8 ? '🎉' : ratio >= 0.5 ? '👍' : '💪';
+  const message = ratio === 1
+    ? 'Felfritt. Du kan det här.'
+    : ratio >= 0.8
+      ? 'Nästan allt satt. Repetera frågorna du missade nedan.'
+      : ratio >= 0.5
+        ? 'Mer än hälften rätt. Gå igenom felen och kör en gång till.'
+        : 'Det här behöver lite mer plugg. Studiekorten är ett bra nästa steg.';
+
+  const progress = buildProgress();
+  progress.update('Klart', 1, `${score} ${plural(score, 'rätt', 'rätt')}`);
+
+  const grade = svg('svg', { class: 'grade', viewBox: '0 0 124 88', 'aria-hidden': 'true' },
+    svg('path', { d: 'M70 9C100 8 118 25 116 45C114 68 86 80 58 78C27 76 7 63 9 42C11 20 36 7 76 12', pathLength: 1 }),
+    svg('text', { x: 62, y: 53, 'text-anchor': 'middle' }, `${score}/${total}`));
+
+  const wrong = state.quizItems
+    .map((item, i) => ({ item, choice: state.quiz.answers[i] }))
+    .filter(({ item, choice }) => choice !== item.correct);
+
+  const review = wrong.length
+    ? [
+        h('p', { class: 'review-heading' }, 'Att repetera'),
+        h('ol', { class: 'review' }, wrong.map(({ item, choice }) => h('li', {},
+          h('p', { class: 'review-q' }, item.question),
+          choice !== null ? h('p', { class: 'review-a is-yours' }, `Ditt svar: ${item.options[choice]}`) : null,
+          h('p', { class: 'review-a is-right' }, `Rätt svar: ${item.options[item.correct]}`)))),
+      ]
+    : null;
+
+  const restart = h('button', {
+    type: 'button',
+    class: 'btn btn-primary',
+    onclick: () => {
+      state.quiz = { index: 0, answers: new Array(total).fill(null) };
+      renderQuestion();
+    },
+  }, 'Gör om quizet');
+  const toCards = h('button', { type: 'button', class: 'btn btn-ghost', onclick: () => setMode('cards') }, 'Plugga med studiekort');
+
+  keyHandler = null;
+  mount(
+    buildNotice(),
+    progress.root,
+    h('section', { class: 'paper', 'aria-labelledby': 'result-title' },
+      paperHead('Resultat'),
+      grade,
+      h('div', { class: 'ruled' },
+        h('h1', { class: 'result-title', id: 'result-title' }, `Du fick ${score} av ${total} rätt! ${emoji}`),
+        h('p', { class: 'result-message' }, message),
+        review)),
+    h('div', { class: 'actions' }, restart, toCards));
+  restart.focus({ preventScroll: true });
+}
+
+/* ====================================================================
+   8. STARTSIDA UTAN DATA OCH FELSIDA
+   ==================================================================== */
+const SAMPLE = [
+  {
+    id: 1,
+    question: 'Vad är React?',
+    options: ['Ett JavaScript-bibliotek för UI', 'Ett databashanteringssystem', 'Ett operativsystem', 'Ett CSS-ramverk'],
+    correct: 0,
+    flashcard_back: 'Ett JS-bibliotek för användargränssnitt utvecklat av Facebook 2013.',
+  },
+  {
+    id: 2,
+    question: 'Vad gör kommandot chmod +x skript.sh?',
+    options: ['Tar bort filen', 'Gör filen körbar', 'Byter ägare på filen', 'Visar filens innehåll'],
+    correct: 1,
+    flashcard_back: 'chmod +x lägger till rättigheten att köra filen, så att skriptet kan startas med ./skript.sh.',
+  },
+  {
+    id: 3,
+    question: 'Vilken HTTP-statuskod betyder att sidan inte hittades?',
+    options: ['200', '301', '404', '500'],
+    correct: 2,
+    flashcard_back: '404 Not Found: servern svarade, men det finns inget på den adressen.',
+  },
+  {
+    id: 4,
+    question: 'Vad står JSON för?',
+    options: ['Java Standard Object Notation', 'JavaScript Object Notation', 'JavaScript Online Network', 'Joined Syntax Object Nodes'],
+    correct: 1,
+    flashcard_back: 'JavaScript Object Notation, ett textformat för strukturerad data.',
+  },
+];
+
+function openFromText(text, mode, errorEl) {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    errorEl.textContent = 'Klistra in data eller en länk först.';
+    errorEl.hidden = false;
+    return;
+  }
+  const isLink = !/^[\s`]*[[{]/.test(trimmed) && /(?:^|[?&#;])data=/i.test(trimmed);
+  if (isLink) {
+    const params = readUrlParams(trimmed);
+    loadData(params.data, { fromUrl: true }, mode || params.type, { source: 'paste' });
+  } else {
+    loadData(trimmed, { fromUrl: false }, mode, { source: 'paste' });
+  }
+}
+
+function renderLanding(presetType) {
+  setHeader(null);
+  keyHandler = null;
+  const area = h('textarea', {
+    id: 'paste',
+    spellcheck: 'false',
+    placeholder: '[{"question": "…", "options": ["…", "…", "…", "…"], "correct": 0, "flashcard_back": "…"}]',
+  });
+  const errorEl = h('p', { class: 'field-error', hidden: true, role: 'alert' });
+  area.addEventListener('input', () => { errorEl.hidden = true; });
+
+  const preferQuiz = normalizeType(presetType) === 'quiz';
+  const cardsButton = h('button', { type: 'button', class: `btn ${preferQuiz ? 'btn-ghost' : 'btn-primary'}`, onclick: () => openFromText(area.value, 'cards', errorEl) }, 'Öppna som studiekort');
+  const quizButton = h('button', { type: 'button', class: `btn ${preferQuiz ? 'btn-primary' : 'btn-ghost'}`, onclick: () => openFromText(area.value, 'quiz', errorEl) }, 'Öppna som quiz');
+  const sampleButton = h('button', {
+    type: 'button',
+    class: 'btn btn-ghost',
+    onclick: () => { area.value = JSON.stringify(SAMPLE, null, 2); errorEl.hidden = true; area.focus(); },
+  }, 'Fyll i exempel');
+
+  mount(
+    h('section', { class: 'paper', 'aria-labelledby': 'landing-title' },
+      paperHead('Ingen data i länken'),
+      h('div', { class: 'ruled' },
+        h('h1', { class: 'page-title', id: 'landing-title' }, 'Klistra in frågor för att börja'),
+        h('p', { class: 'page-text' }, 'Sidan läser frågorna från länkens data-parameter, men länken du öppnade har ingen. Klistra in JSON-datan eller hela länken här i stället.')),
+      h('label', { class: 'field', for: 'paste' }, h('span', { class: 'field-label' }, 'Data eller länk'), area, errorEl),
+      h('div', { class: 'paper-actions' }, preferQuiz ? [quizButton, cardsButton] : [cardsButton, quizButton], sampleButton)),
+    h('p', { class: 'code-line' }, 'Länkformat: ', h('code', {}, 'app.html?type=cards&data=[…]'), ' eller ', h('code', {}, 'type=quiz')));
+}
+
+const ERROR_COPY = {
+  parse: {
+    head: 'Fel vid inläsning',
+    title: 'Frågorna i länken kunde inte läsas',
+    text: [
+      'Datan är inte giltig JSON, inte ens efter den automatiska reparationen. Det händer oftast när en länk klipps av eller ändras på vägen, till exempel i ett mejl.',
+      'Be om en ny länk, eller öppna detaljerna nedan och rätta datan själv.',
+    ],
+  },
+  shape: {
+    head: 'Fel format',
+    title: 'Länken innehåller inga frågor i rätt format',
+    text: [
+      'Datan kunde läsas, men varje fråga behöver minst fältet question. För quiz krävs också options och correct.',
+    ],
+  },
+  mode: {
+    head: 'Quiz går inte att visa',
+    title: 'Datan räcker inte till ett quiz',
+    text: [
+      'Ingen av frågorna har både svarsalternativ (options) och ett giltigt rätt svar (correct). Frågorna går fortfarande att plugga som studiekort.',
+    ],
+  },
+  partial: {
+    head: 'Delvis trasig data',
+    title: 'Stora delar av datan kunde inte läsas',
+    text: [
+      'Länken har troligen klippts av eller ändrats på vägen. Du kan fortsätta med frågorna som gick att läsa, eller be om en ny länk.',
+    ],
+  },
+  unknown: {
+    head: 'Fel vid visning',
+    title: 'Något gick fel när frågorna skulle visas',
+    text: ['Datan lästes in, men sidan stötte på ett oväntat fel. Detaljerna nedan visar vad som hände.'],
+  },
+};
+
+function renderError(error, context) {
+  setHeader(null);
+  keyHandler = null;
+  const copy = ERROR_COPY[error.kind] || ERROR_COPY.unknown;
+  const text = error.text ?? '';
+  const log = error.log ?? [];
+  const repairs = log.filter((entry) => entry.repair).map((entry) => entry.label);
+
+  // Primära åtgärder beroende på feltyp.
+  const primary = [];
+  if (error.kind === 'mode' && context.result) {
+    primary.push(h('button', {
+      type: 'button',
+      class: 'btn btn-primary',
+      onclick: () => { updateUrlType('cards'); loadData(context.input, context.options, 'cards', context.meta); },
+    }, 'Visa som studiekort'));
+  }
+  if (error.kind === 'partial' && context.result) {
+    const kept = context.result.data.length;
+    primary.push(h('button', {
+      type: 'button',
+      class: 'btn btn-primary',
+      onclick: () => loadData(context.input, context.options, context.requestedType, { ...context.meta, acceptPartial: true }),
+    }, `Fortsätt med ${kept} av ${context.result.total} frågor`));
+  }
+  primary.push(h('button', { type: 'button', class: 'btn btn-ghost', onclick: () => renderLanding(context.requestedType) }, 'Klistra in data manuellt'));
+
+  // Diagnostik.
+  const causeMessage = error.cause && error.cause.message ? error.cause.message : error.message;
+  const position = error.kind === 'parse' || error.kind === 'partial' ? findErrorPosition(causeMessage, text) : -1;
+  const diagnostics = [];
+
+  diagnostics.push(h('h3', {}, 'Felmeddelande'));
+  if (position >= 0 && position <= text.length) {
+    diagnostics.push(h('p', { class: 'error-message' }, `Tolkningen stannade vid tecken ${position + 1} av ${text.length}.`));
+    const from = Math.max(0, position - 70);
+    const to = Math.min(text.length, position + 70);
+    diagnostics.push(h('pre', { class: 'snippet' },
+      (from > 0 ? '…' : '') + text.slice(from, position),
+      h('mark', {}, text[position] ?? ' '),
+      text.slice(position + 1, to) + (to < text.length ? '…' : '')));
+  } else {
+    diagnostics.push(h('p', { class: 'error-message' }, error.message));
+  }
+  if (causeMessage && causeMessage !== error.message || position >= 0) {
+    diagnostics.push(h('p', { class: 'error-raw' }, `Webbläsarens meddelande: ${causeMessage}`));
+  }
+
+  diagnostics.push(h('h3', {}, 'Automatiska rättelser'));
+  diagnostics.push(repairs.length
+    ? h('ul', {}, repairs.map((r) => h('li', {}, r)))
+    : h('p', { class: 'error-message' }, 'Inga rättelser behövdes eller kunde göras.'));
+
+  if (error.kind === 'shape') {
+    diagnostics.push(h('h3', {}, 'Förväntat format'));
+    diagnostics.push(h('pre', { class: 'snippet' }, JSON.stringify([SAMPLE[0]], null, 2)));
+  }
+
+  const editor = h('textarea', { id: 'repair-text', spellcheck: 'false' });
+  editor.value = text || String(context.input ?? '');
+  const retry = h('button', {
+    type: 'button',
+    class: 'btn btn-primary',
+    onclick: () => loadData(editor.value, { fromUrl: false }, context.requestedType, { source: 'paste' }),
+  }, 'Försök igen');
+  const report = () => [
+    `Fel: ${causeMessage}`,
+    position >= 0 ? `Position: ${position}` : null,
+    `Rättelser: ${repairs.join('; ') || 'inga'}`,
+    '',
+    '--- Sanerad data ---',
+    text,
+    '',
+    '--- Originaldata från länken ---',
+    String(context.input ?? ''),
+  ].filter((line) => line !== null).join('\n');
+
+  const original = h('textarea', { readonly: true, spellcheck: 'false', 'aria-label': 'Originaldata från länken' });
+  original.value = String(context.input ?? '');
+
+  mount(h('section', { class: 'paper is-error', 'aria-labelledby': 'error-title', role: 'alert' },
+    paperHead(copy.head),
+    h('div', { class: 'ruled' },
+      h('h1', { class: 'page-title', id: 'error-title' }, copy.title),
+      copy.text.map((p) => h('p', { class: 'page-text' }, p))),
+    h('div', { class: 'paper-actions' }, primary),
+    h('details', { class: 'diagnostics' },
+      h('summary', {}, 'Visa vad som gick fel'),
+      diagnostics,
+      h('label', { class: 'field', for: 'repair-text' },
+        h('span', { class: 'field-label' }, 'Sanerad data. Rätta texten och försök igen.'),
+        editor),
+      h('div', { class: 'actions' }, retry, copyButton('Kopiera felrapport', 'Felrapport kopierad', report)),
+      h('details', {},
+        h('summary', {}, 'Originaldata från länken'),
+        h('div', { class: 'field' }, original)))));
+}
+
+/* ====================================================================
+   9. START
+   ==================================================================== */
+(function init() {
+  const params = readUrlParams(location.href);
+  if (params.data === null || params.data.trim() === '') {
+    renderLanding(params.type);
+    return;
+  }
+  loadData(params.data, { fromUrl: true }, params.type);
+})();
+</script>
+</body>
+</html>
