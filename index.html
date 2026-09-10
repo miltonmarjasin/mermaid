@@ -26,32 +26,43 @@
     mermaid.initialize({ startOnLoad: false });
 
     document.addEventListener("DOMContentLoaded", async () => {
-      // 1. Läs hela parametern direkt från URL för att undvika avklippning vid &
+      // 1. Läs in parametern från adressfältet
       const match = window.location.href.match(/[?&]mermaidCode=([^#]*)/);
       
       if (match && match[1]) {
         const container = document.getElementById('diagram');
         try {
-          // 2. Avkoda URL-strängen
-          let cleanCode = decodeURIComponent(match[1]);
+          let cleanCode = match[1];
 
-          // 3. Tvätta alla HTML-entiteter (&gt;, &lt;, &amp;, &quot;)
+          // 2. Hantera dubbel/trippel URL-kodning från e-postomdirigeringar
+          for (let i = 0; i < 3; i++) {
+            try {
+              const decoded = decodeURIComponent(cleanCode);
+              if (decoded === cleanCode) break;
+              cleanCode = decoded;
+            } catch (e) { break; }
+          }
+
+          // 3. Gör om alla plustecken (+) till vanliga mellanslag (löser graph+TD)
+          cleanCode = cleanCode.replace(/\+/g, ' ');
+
+          // 4. Tvätta alla HTML-entiteter
           cleanCode = cleanCode
             .replace(/&gt;/g, '>')
             .replace(/&lt;/g, '<')
             .replace(/&amp;/g, '&')
             .replace(/&quot;/g, '"');
 
-          // 4. Reparera brutna pilar (--A eller --[ blir -->A eller -->[)
+          // 5. Reparera brutna pilar (--A blir -->A)
           cleanCode = cleanCode.replace(/--([a-zA-Z0-9_\[])/g, '-->$1');
 
-          // 5. Ta bort alla varianter av skräpvinklar i slutet (hanterar både ]>; och ];>)
-          cleanCode = cleanCode.replace(/(;\s*>+|>\s*;?|\s*>+)+$/, ';');
+          // 6. Ta bort skräptecken, vinklar och avslutande punkter i slutet av koden
+          cleanCode = cleanCode.replace(/[\.\s>;]+$/, ';');
 
-          // 6. Omslut alla nod-etiketter med citationstecken ["..."] för att säkra specialtecken, & och ()
+          // 7. Omslut alla nod-etiketter med citationstecken ["..."]
           cleanCode = cleanCode.replace(/\["?([^"\]]+)"?\]/g, '["$1"]');
 
-          // 7. Rendera diagrammet
+          // 8. Rendera diagrammet
           const { svg } = await mermaid.render('mermaid-svg', cleanCode);
           container.innerHTML = svg;
         } catch (err) {
