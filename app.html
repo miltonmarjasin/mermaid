@@ -305,6 +305,31 @@ main {
 .explanation-label { font: 600 .85rem/var(--line) var(--font-ui); color: var(--ink-soft); margin: 0; }
 .explanation-text { margin: 0; font-size: 1.05rem; white-space: pre-line; overflow-wrap: anywhere; }
 
+/* Länkar i kortens text. Understrykningen läggs lågt så att den inte
+   krockar med linjerna, och källhänvisningar ([1]) blir små etiketter
+   som inte ändrar radhöjden. */
+.link {
+  color: var(--pen);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: .18em;
+  overflow-wrap: anywhere;
+}
+.link:hover { color: var(--pen-strong); text-decoration-thickness: 2px; }
+.link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
+.link.cite {
+  font: 600 .72em/1 var(--font-ui);
+  text-decoration: none;
+  padding: .12em .4em;
+  margin: 0 .08em;
+  border-radius: .3em;
+  background: color-mix(in srgb, var(--pen) 11%, transparent);
+  position: relative;
+  top: -.35em;
+  white-space: nowrap;
+}
+.link.cite:hover { background: color-mix(in srgb, var(--pen) 20%, transparent); }
+
 /* Stämpeln: den enda stora gesten i gränssnittet. */
 .stamp {
   position: absolute;
@@ -483,15 +508,17 @@ function readUrlParams(href) {
   const start = href.search(/[?#]/);
   const query = start >= 0 ? href.slice(start + 1) : '';
   const dataMatch = /(?:^|[?&#;])data=/i.exec(query);
-  const findType = (part) => {
-    const m = /(?:^|[?&#;])type=([^&#;]*)/i.exec(part);
+  const find = (part, name) => {
+    const m = new RegExp(`(?:^|[?&#;])${name}=([^&#;]*)`, 'i').exec(part);
     return m ? safeDecodeURIComponent(m[1]) : null;
   };
+  const findType = (part) => find(part, 'type');
 
-  if (!dataMatch) return { type: findType(query), data: null };
+  if (!dataMatch) return { type: findType(query), src: find(query, 'src'), data: null };
 
   let data = query.slice(dataMatch.index + dataMatch[0].length);
   let type = findType(query.slice(0, dataMatch.index));
+  let src = find(query.slice(0, dataMatch.index), 'src');
 
   // Parametrar efter datans sista slutparentes (&type=quiz, &utm_source=…)
   // hör inte till datan. type plockas upp, resten tas bort i tysthet.
@@ -503,11 +530,13 @@ function readUrlParams(href) {
       return k === -1 ? 0 : k + 3;
     }));
   const tail = data.slice(lastEnd).replace(/(?:&amp;|[?&#;])([a-z_][\w-]*)=([^&#;]*)/gi, (_, key, value) => {
-    if (!type && key.toLowerCase() === 'type') type = safeDecodeURIComponent(value);
+    const name = key.toLowerCase();
+    if (!type && name === 'type') type = safeDecodeURIComponent(value);
+    if (!src && name === 'src') src = safeDecodeURIComponent(value);
     return '';
   });
   data = data.slice(0, lastEnd) + tail;
-  return { type, data };
+  return { type, src, data };
 }
 
 function normalizeType(type) {
@@ -1129,8 +1158,82 @@ function announce(message) {
   requestAnimationFrame(() => { $announcer.textContent = message; });
 }
 
+/* Länkar i texten: [etikett](https://…), <https://…> och nakna adresser.
+   Markdown-escapade varianter (\[1\]\(…\)) godtas också.
+   Bara http, https och mailto blir länkar; allt annat (t.ex. javascript:)
+   visas som vanlig text. Länkarna byggs som element, aldrig via innerHTML. */
+const LINK_RE = /\\?\[([^\]\n]+?)\\?\]\\?\(\s*((?:https?:\/\/|mailto:|www\.)(?:[^\s()]|\([^\s()]*\))+?)\\?\s*\)|<((?:https?:\/\/|mailto:)[^\s<>]+)>|((?:https?:\/\/|www\.)[^\s<>"]+)/gi;
+
+function safeHref(url) {
+  const withScheme = /^www\./i.test(url) ? `https://${url}` : url;
+  try {
+    const parsed = new URL(withScheme);
+    return /^(https?|mailto):$/.test(parsed.protocol) ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Delar upp texten i textbitar och länkar. Används av både richText och plainText. */
+function splitLinks(text) {
+  const parts = [];
+  let last = 0;
+  for (const m of String(text).matchAll(LINK_RE)) {
+    let [whole, label, mdUrl, angleUrl, bareUrl] = m;
+    let end = m.index + whole.length;
+    if (bareUrl) {
+      // Skiljetecken efter en naken adress hör till meningen, inte länken.
+      let trimmed = bareUrl.replace(/[.,;:!?'"»”’]+$/, '');
+      while (trimmed.endsWith(')') && (trimmed.match(/\(/g) || []).length < (trimmed.match(/\)/g) || []).length) {
+        trimmed = trimmed.slice(0, -1);
+      }
+      end = m.index + trimmed.length;
+      bareUrl = trimmed;
+    }
+    const url = mdUrl || angleUrl || bareUrl;
+    const href = safeHref(url);
+    if (!href) continue;
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    const shown = label ? label.trim() : url.replace(/^mailto:/i, '');
+    parts.push({ href, label: shown, cite: !!label && /^\d{1,3}$/.test(shown) });
+    last = end;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
+function richText(text) {
+  return splitLinks(text).map((part) => {
+    if (typeof part === 'string') return part;
+    let host = '';
+    try { host = new URL(part.href).hostname.replace(/^www\./, ''); } catch { /* mailto m.m. */ }
+    const label = part.cite ? `[${part.label}]` : part.label;
+    return h('a', {
+      class: part.cite ? 'link cite' : 'link',
+      href: part.href,
+      target: '_blank',
+      rel: 'noopener noreferrer',
+      title: host ? `${host} (öppnas i ny flik)` : 'Öppnas i ny flik',
+      'aria-label': part.cite ? `Källa ${part.label}${host ? `, ${host}` : ''}` : null,
+    }, label);
+  });
+}
+
+/** Samma text utan länkmarkering: för knappar, skärmläsare och längdmätning.
+ *  dropCites tar bort källnummer helt, t.ex. i svarsalternativ där ett [1]
+ *  bara på det rätta alternativet skulle avslöja svaret. */
+function plainText(text, { dropCites = false } = {}) {
+  const out = splitLinks(text).map((part) => {
+    if (typeof part === 'string') return part;
+    if (part.cite) return dropCites ? '' : `[${part.label}]`;
+    return part.label;
+  }).join('');
+  return dropCites ? out.replace(/[ \t]+([.,;:!?)])/g, '$1').replace(/[ \t]{2,}/g, ' ').trim() : out;
+}
+
 function textSizeClass(text) {
-  return text.length > 220 ? 'is-long' : text.length > 110 ? 'is-medium' : '';
+  const t = plainText(text);
+  return t.length > 220 ? 'is-long' : t.length > 110 ? 'is-medium' : '';
 }
 
 function paperHead(left, right) {
@@ -1248,12 +1351,74 @@ document.addEventListener('keydown', (event) => {
 });
 
 /* ====================================================================
-   5. INLÄSNING
+   5. BASE64 OCH KOMPRIMERAD DATA
+   JSON i klartext blir lång i en URL. Datan får därför också vara
+   base64, och base64 av gzip- eller deflate-komprimerad JSON, vilket
+   kortar länken till ungefär en tredjedel.
    ==================================================================== */
-function loadData(input, options, requestedType, meta = {}) {
+const BASE64_RE = /^[A-Za-z0-9+/_-]{24,}={0,2}$/;
+
+function base64ToBytes(text) {
+  const padded = text.replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/** Gissar packformat på de första byten: 1f8b = gzip, 78xx = zlib/deflate. */
+function compressionFormats(bytes) {
+  if (bytes[0] === 0x1f && bytes[1] === 0x8b) return ['gzip'];
+  if ((bytes[0] & 0x0f) === 8 && ((bytes[0] << 8) | bytes[1]) % 31 === 0) return ['deflate', 'deflate-raw'];
+  return ['deflate-raw', 'deflate', 'gzip'];
+}
+
+async function inflate(bytes, format) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream(format));
+  return new TextDecoder().decode(await new Response(stream).arrayBuffer());
+}
+
+const looksLikeJson = (text) => /^[\s\ufeff]*[[{]/.test(text);
+
+/** Packar upp base64 och komprimerad data. Är inget av det aktuellt
+ *  lämnas texten orörd, så vanlig JSON påverkas aldrig. */
+async function decodeTransport(input) {
+  const raw = String(input ?? '').trim().replace(/\s+/g, '');
+  // Vanlig base64 innehåller + och =, som blir %2B och %3D i en URL.
+  const candidate = BASE64_RE.test(raw) ? raw
+    : raw.includes('%') && BASE64_RE.test(safeDecodeURIComponent(raw)) ? safeDecodeURIComponent(raw)
+      : null;
+  if (!candidate) return { text: input, decoded: null };
+
+  let bytes;
+  try { bytes = base64ToBytes(candidate); } catch { return { text: input, decoded: null }; }
+
+  const plain = new TextDecoder().decode(bytes);
+  if (looksLikeJson(plain)) return { text: plain, decoded: 'base64' };
+
+  if (typeof DecompressionStream === 'function') {
+    for (const format of compressionFormats(bytes)) {
+      try {
+        const text = await inflate(bytes, format);
+        if (looksLikeJson(text)) return { text, decoded: format };
+      } catch { /* fel format, prova nästa */ }
+    }
+  } else if (bytes[0] === 0x1f || (bytes[0] & 0x0f) === 8) {
+    throw new LoadError('transport', 'Datan är komprimerad, men den här webbläsaren saknar DecompressionStream. Prova en nyare webbläsare eller en länk med okomprimerad data.');
+  }
+  return { text: input, decoded: null };
+}
+
+/* ====================================================================
+   6. INLÄSNING
+   ==================================================================== */
+async function loadData(input, options, requestedType, meta = {}) {
   let result = null;
   try {
-    result = parseJsonData(input, options);
+    const transport = await decodeTransport(input);
+    // Uppackad data är redan ren JSON och ska inte saneras som URL-text.
+    if (transport.decoded) options = { ...options, fromUrl: false };
+    result = parseJsonData(transport.text, options);
     if (result.skipped.length && result.data.length / result.total < 0.5 && !meta.acceptPartial) {
       throw new LoadError('partial', 'Stora delar av datan kunde inte läsas.', { cause: result.cause });
     }
@@ -1317,18 +1482,20 @@ function buildNotice() {
     ? warnings[0]
     : warnings.length
       ? 'Delar av datan kunde inte användas. Visa detaljer'
-      : 'Länken innehöll formateringsfel som rättades automatiskt';
+      : repairs.length === 1
+        ? repairs[0]
+        : 'Länken innehöll formateringsfel som rättades automatiskt';
 
   return h('details', { class: 'notice' },
     h('summary', {}, summary),
     h('div', { class: 'notice-body' },
       warnings.length ? [h('p', {}, 'Att känna till'), h('ul', {}, warnings.map((w) => h('li', {}, w)))] : null,
-      repairs.length ? [h('p', {}, 'Rättelser som gjordes'), h('ul', {}, repairs.map((r) => h('li', {}, r)))] : null,
+      repairs.length > 1 ? [h('p', {}, 'Rättelser som gjordes'), h('ul', {}, repairs.map((r) => h('li', {}, r)))] : null,
       repairs.length ? copyButton('Kopiera rättad länk', 'Rättad länk kopierad', () => buildShareUrl()) : null));
 }
 
 /* ====================================================================
-   6. LÄGE 1: STUDIEKORT
+   7. LÄGE 1: STUDIEKORT
    ==================================================================== */
 function renderCards() {
   const total = state.items.length;
@@ -1341,12 +1508,12 @@ function renderCards() {
   const front = h('section', { class: 'paper face face-front' },
     paperHead('Fråga', [flipIcon(), 'Visa svar']),
     h('div', { class: 'ruled' }, frontText));
-  const back = h('section', { class: 'paper face face-back', 'aria-hidden': 'true' },
+  const back = h('section', { class: 'paper face face-back', 'aria-hidden': 'true', inert: true },
     paperHead('Svar', [flipIcon(), 'Visa fråga']),
     h('div', { class: 'squared' }, backLead, backText));
 
   const card = h('div', { class: 'flip-card' }, front, back);
-  const scene = h('div', { class: 'flip-scene', role: 'button', tabindex: 0 }, card);
+  const scene = h('div', { class: 'flip-scene', role: 'group', 'aria-roledescription': 'studiekort', 'aria-label': 'Tryck eller mellanslag för att vända', tabindex: 0 }, card);
 
   // "kort" döljs på smala skärmar så att knapparna ryms på en rad.
   const navLabel = (main, extra) => [main, h('span', { class: 'nav-extra' }, extra)];
@@ -1360,12 +1527,15 @@ function renderCards() {
     if (!animate) { void card.offsetWidth; card.classList.remove('no-anim'); }
     front.setAttribute('aria-hidden', String(flipped));
     back.setAttribute('aria-hidden', String(!flipped));
+    // Länkar på den dolda sidan ska varken gå att tabba till eller klicka på.
+    front.inert = flipped;
+    back.inert = !flipped;
   };
 
   const flip = () => {
     setFlipped(!state.card.flipped);
     const item = state.items[state.card.index];
-    announce(state.card.flipped ? `Svar: ${cardBack(item)}` : `Fråga: ${item.question}`);
+    announce(plainText(state.card.flipped ? `Svar: ${cardBack(item)}` : `Fråga: ${item.question}`));
   };
 
   const show = (index, direction = 0) => {
@@ -1373,15 +1543,15 @@ function renderCards() {
     const item = state.items[index];
     if (state.card.flipped) setFlipped(false, false);
 
-    frontText.textContent = item.question;
+    frontText.replaceChildren(...richText(item.question));
     frontText.className = `card-text ${textSizeClass(item.question)}`;
 
     const backContent = cardBack(item);
     const correctOption = item.correct >= 0 ? item.options[item.correct] : '';
     const showLead = correctOption && item.back && correctOption !== item.back;
     backLead.hidden = !showLead;
-    backLead.textContent = showLead ? `Rätt svar: ${correctOption}` : '';
-    backText.textContent = backContent;
+    backLead.replaceChildren(...(showLead ? ['Rätt svar: ', ...richText(correctOption)] : []));
+    backText.replaceChildren(...richText(backContent));
     backText.className = `card-text ${textSizeClass(backContent)}`;
 
     progress.update(`Kort ${index + 1} av ${total}`, (index + 1) / total);
@@ -1416,11 +1586,13 @@ function renderCards() {
       go(dx < 0 ? 1 : -1);
     }
   });
-  scene.addEventListener('click', () => {
+  scene.addEventListener('click', (e) => {
     if (suppressClick) { suppressClick = false; return; }
+    if (e.target.closest('a')) return; // en länk öppnas, kortet vänds inte
     flip();
   });
   scene.addEventListener('keydown', (e) => {
+    if (e.target !== scene) return; // Enter på en länk ska följa länken
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); }
   });
   prevButton.addEventListener('click', () => go(-1));
@@ -1445,7 +1617,7 @@ function renderCards() {
 }
 
 /* ====================================================================
-   7. LÄGE 2: QUIZ
+   8. LÄGE 2: QUIZ
    ==================================================================== */
 const quizScore = () => state.quiz.answers.reduce((sum, answer, i) => sum + (answer === state.quizItems[i].correct ? 1 : 0), 0);
 
@@ -1457,15 +1629,16 @@ function renderQuestion() {
   const progress = buildProgress();
 
   const body = h('div', { class: 'ruled' },
-    h('p', { class: `card-text ${textSizeClass(item.question)}` }, item.question));
+    h('p', { class: `card-text ${textSizeClass(item.question)}` }, richText(item.question)));
   const paper = h('section', { class: 'paper quiz-card', 'aria-label': `Fråga ${index + 1}` }, paperHead('Fråga'), body);
 
   const buttons = item.options.map((option, i) => h('button', {
     type: 'button',
     class: 'option',
-    'aria-label': `${letterFor(i)}: ${option}`,
+    'aria-label': `${letterFor(i)}: ${plainText(option, { dropCites: true })}`,
     onclick: () => answer(i),
-  }, h('span', { class: 'option-key', 'aria-hidden': 'true' }, letterFor(i)), h('span', { class: 'option-text' }, option)));
+    // Länkar kan inte ligga inuti en knapp, så alternativen visar bara etiketten.
+  }, h('span', { class: 'option-key', 'aria-hidden': 'true' }, letterFor(i)), h('span', { class: 'option-text' }, plainText(option, { dropCites: true }))));
 
   const actions = h('div', { class: 'actions end' });
 
@@ -1500,7 +1673,7 @@ function renderQuestion() {
     if (item.back) {
       body.append(h('div', { class: 'explanation' },
         h('p', { class: 'explanation-label' }, 'Förklaring'),
-        h('p', { class: 'explanation-text' }, item.back)));
+        h('p', { class: 'explanation-text' }, richText(item.back))));
     }
 
     const last = index === total - 1;
@@ -1510,7 +1683,7 @@ function renderQuestion() {
 
     if (fresh) {
       const verdict = correct ? 'Rätt svar.' : `Fel svar. Rätt svar är ${letterFor(item.correct)}: ${item.options[item.correct]}.`;
-      announce(item.back ? `${verdict} ${item.back}` : verdict);
+      announce(plainText(item.back ? `${verdict} ${item.back}` : verdict));
       nextButton.focus({ preventScroll: true });
       nextButton.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     }
@@ -1528,7 +1701,7 @@ function renderQuestion() {
       const key = e.key.toLowerCase();
       const choice = /^[1-9]$/.test(key) ? Number(key) - 1 : /^[a-z]$/.test(key) ? key.charCodeAt(0) - 97 : -1;
       if (choice >= 0 && choice < item.options.length) { e.preventDefault(); answer(choice); }
-    } else if ((e.key === 'Enter' || e.key === 'ArrowRight') && !(e.target instanceof HTMLButtonElement)) {
+    } else if ((e.key === 'Enter' || e.key === 'ArrowRight') && !(e.target.closest && e.target.closest('button, a'))) {
       e.preventDefault();
       next();
     }
@@ -1573,9 +1746,9 @@ function renderResult() {
     ? [
         h('p', { class: 'review-heading' }, 'Att repetera'),
         h('ol', { class: 'review' }, wrong.map(({ item, choice }) => h('li', {},
-          h('p', { class: 'review-q' }, item.question),
-          choice !== null ? h('p', { class: 'review-a is-yours' }, `Ditt svar: ${item.options[choice]}`) : null,
-          h('p', { class: 'review-a is-right' }, `Rätt svar: ${item.options[item.correct]}`)))),
+          h('p', { class: 'review-q' }, richText(item.question)),
+          choice !== null ? h('p', { class: 'review-a is-yours' }, 'Ditt svar: ', richText(item.options[choice])) : null,
+          h('p', { class: 'review-a is-right' }, 'Rätt svar: ', richText(item.options[item.correct]))))),
       ]
     : null;
 
@@ -1605,7 +1778,7 @@ function renderResult() {
 }
 
 /* ====================================================================
-   8. STARTSIDA UTAN DATA OCH FELSIDA
+   9. STARTSIDA UTAN DATA OCH FELSIDA
    ==================================================================== */
 const SAMPLE = [
   {
@@ -1613,7 +1786,7 @@ const SAMPLE = [
     question: 'Vad är React?',
     options: ['Ett JavaScript-bibliotek för UI', 'Ett databashanteringssystem', 'Ett operativsystem', 'Ett CSS-ramverk'],
     correct: 0,
-    flashcard_back: 'Ett JS-bibliotek för användargränssnitt utvecklat av Facebook 2013.',
+    flashcard_back: 'Ett JS-bibliotek för användargränssnitt, släppt av Facebook 2013. Routing och global state kräver ofta tredjepartsbibliotek [1](https://react.dev/learn), och dokumentationen rekommenderar ramverk som Next.js [2](https://react.dev/learn/creating-a-react-app).',
   },
   {
     id: 2,
@@ -1686,6 +1859,22 @@ function renderLanding(presetType) {
 }
 
 const ERROR_COPY = {
+  transport: {
+    head: 'Datan kunde inte packas upp',
+    title: 'Den komprimerade datan gick inte att läsa',
+    text: [
+      'Länken innehåller packad data som den här webbläsaren inte kan packa upp.',
+      'Be om en länk med okomprimerad data, eller klistra in JSON direkt nedan.',
+    ],
+  },
+  src: {
+    head: 'Filen kunde inte hämtas',
+    title: 'Frågekorten gick inte att läsa in',
+    text: [
+      'Länken pekar på en JSON-fil med src=, men filen kunde inte hämtas. Kontrollera att filen ligger på adressen och att namnet stavas likadant, inklusive stora och små bokstäver.',
+      'Du kan också klistra in datan direkt nedan.',
+    ],
+  },
   parse: {
     head: 'Fel vid inläsning',
     title: 'Frågorna i länken kunde inte läsas',
@@ -1821,11 +2010,63 @@ function renderError(error, context) {
 }
 
 /* ====================================================================
-   9. START
+   10. HÄMTA FRÅN FIL (?src=)
+   Långa kortlekar får inte plats i en URL. Med src= läser sidan i
+   stället en JSON-fil, och länken blir kort nog att dela.
+   ==================================================================== */
+function resolveSrc(value) {
+  try {
+    const url = new URL(value, location.href);
+    return /^(https?|file):$/.test(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function renderLoading(url) {
+  let name = url;
+  try { name = decodeURIComponent(new URL(url).pathname.split('/').pop()) || url; } catch { /* behåll url */ }
+  setHeader(null);
+  mount(h('section', { class: 'paper' },
+    paperHead('Hämtar'),
+    h('div', { class: 'ruled' },
+      h('p', { class: 'card-text' }, 'Hämtar frågekort…'),
+      h('p', { class: 'hint', style: 'text-align:left' }, name))));
+}
+
+async function loadFromSrc(value, requestedType) {
+  const url = resolveSrc(value);
+  if (!url) {
+    renderError(new LoadError('src', 'Adressen i src= går inte att läsa. Använd ett filnamn eller en http/https-adress.'), { input: value, requestedType });
+    return;
+  }
+  renderLoading(url);
+  let text;
+  try {
+    const response = await fetch(url, { credentials: 'omit', redirect: 'follow' });
+    if (!response.ok) {
+      throw new LoadError('src', response.status === 404
+        ? `Filen hittades inte (404). Ligger den på ${url}?`
+        : `Servern svarade ${response.status} ${response.statusText}.`);
+    }
+    text = await response.text();
+  } catch (error) {
+    const message = error instanceof LoadError
+      ? error.message
+      : `Filen kunde inte hämtas: ${error.message}. Ligger den på en annan domän behöver den skickas med CORS-headern Access-Control-Allow-Origin.`;
+    renderError(new LoadError('src', message, { cause: error }), { input: url, requestedType });
+    return;
+  }
+  loadData(text, { fromUrl: false }, requestedType, { source: 'src', url });
+}
+
+/* ====================================================================
+   11. START
    ==================================================================== */
 (function init() {
   const params = readUrlParams(location.href);
   if (params.data === null || params.data.trim() === '') {
+    if (params.src) { loadFromSrc(params.src, params.type); return; }
     renderLanding(params.type);
     return;
   }
